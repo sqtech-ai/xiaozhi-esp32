@@ -1,20 +1,22 @@
-# xiaozhi-esp32-minimal
+# xiaozhi-esp32
 
-基于 [小智 AI 聊天机器人（xiaozhi-esp32）](https://github.com/78/xiaozhi-esp32) 源码裁剪/扩展的 ESP32 固件工程，在保留小智语音对话能力的基础上，集成 **IOTSdk 在线音乐播放** 能力（咪咕音乐内容源）。
+基于 [小智 AI 聊天机器人（xiaozhi-esp32）](https://github.com/78/xiaozhi-esp32) 源码扩展的 ESP32 固件工程，在保留小智语音对话能力的基础上，集成 **IOTSdk 在线音乐播放** 能力（咪咕音乐内容源）。
 
 ## 上游项目
 
-本工程源码基于上游仓库 **[78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)** 的 **`v2.2.4`** 标签开发。
+本工程源码基于上游仓库 **[78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)** 的 **`v2.2.6`** 分支开发。
 
 | 项目 | 说明 |
 |------|------|
 | 上游仓库 | https://github.com/78/xiaozhi-esp32 |
-| 基准版本 | [v2.2.4](https://github.com/78/xiaozhi-esp32/tree/v2.2.4) |
+| 基准分支 | [v2.2.6](https://github.com/78/xiaozhi-esp32/tree/v2.2.6) |
 | 上游许可证 | MIT License |
 
 上游项目提供 MCP 语音交互、多板型支持、WebSocket/MQTT 通信等基础能力；本工程在此基础上增加在线音乐模块，并接入速启科技 IOTSdk。
 
 ## 在线音乐扩展说明
+
+> 开源项目默认只能搜索 5 首「流行」歌曲，如需开通完整业务，请与商务联系。
 
 本工程通过 **`components/iotsdk`** 组件集成预编译库 `migumusic.a`，对外暴露两类核心接口：
 
@@ -52,6 +54,8 @@ MCP 工具（main/mcp_server.cc）
 - **与对话共存**：播放时抢占 TTS/上行通道；连接云端或 TTS 播报时自动打断音乐（见 `Esp32Music`）
 
 ### 运行效果
+
+> 开源项目默认只能搜索 5 首「流行」歌曲，如需开通完整业务，请与商务联系。
 
 在线播放咪咕音乐时的设备界面示例：顶部状态栏显示网络与时间，中部展示歌曲封面，下方显示歌名/歌手、播放进度（`01:09/05:43`）与当前歌词。
 
@@ -152,16 +156,16 @@ main/application.cc      # IOTSdk 初始化入口
 
 ## 许可证
 
-- 基于 [xiaozhi-esp32 v2.2.4](https://github.com/78/xiaozhi-esp32/tree/v2.2.4) 修改的部分遵循上游 **MIT License**，详见 [LICENSE](LICENSE)。
+- 基于 [xiaozhi-esp32 v2.2.6](https://github.com/78/xiaozhi-esp32/tree/v2.2.6) 修改的部分遵循上游 **MIT License**，详见 [LICENSE](LICENSE)。
 - `components/iotsdk/migumusic.a` 为预编译二进制库，其使用与分发须遵守速启科技/IOTSdk 相关授权约定，**不等同于 MIT 开源源码**。
 
 ## 联系我们
 
 商务合作与SDK获取请联系：
 
-[service@suqi.tech](mailto:service@suqi.tech)
+[lz@suqi.tech](mailto:lz@suqi.tech)  
+[zhouwanguang@suqi.tech](mailto:zhouwanguang@suqi.tech)
 
-18102203284
-<a href="docs/企业微信截图.png" target="_blank" title="企业微信">
-    <img src="docs/企业微信截图.png" width="240" />
+<a href="components/iotsdk/docs/contacts.png" target="_blank" title="企业微信">
+    <img src="components/iotsdk/docs/contacts.png" width="240" />
 </a>
