@@ -44,6 +44,7 @@ set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg"
 # Add board common files
 list(APPEND SOURCES
     "boards/common/board.cc"
+    "boards/common/esp32_music.cc"
     "boards/common/wifi_board.cc"
     "boards/common/ml307_board.cc"
     "boards/common/nt26_board.cc"
@@ -1023,6 +1024,7 @@ idf_component_register(SRCS ${SOURCES}
                         efuse
                         bt
                         fatfs
+                        iotsdk
                         ${MAIN_PRIV_REQUIRES_EXTRA}
                     )
 

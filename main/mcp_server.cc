@@ -62,6 +62,80 @@ void McpServer::AddCommonTools() {
             codec->SetOutputVolume(properties["volume"].value<int>());
             return true;
         });
+
+    auto music = board.GetMusic();
+    if (music) {
+        AddTool("self.music.play_online",
+                "Search and play music on the device speaker from the cloud music catalog (e.g. Migu).\n"
+                "Use this tool when the user clearly wants to listen to music, including phrases like: "
+                "\"play <song>\", \"play <artist> <song>\", \"我想听…\", \"放一首…\", \"来一首…\", \"播放…\".\n"
+                "general chat with no playback intent, or when the user only asks what song is playing without requesting playback.\n"
+                "Args:\n"
+                "  `text`:[required] The text that you want to search for.\n"
+                "  `singerName`:[optional] Performer / artist (e.g. \"刀郎\").\n"
+                "  `songName`:[optional] Track title (e.g. \"西海情歌\").\n"
+                "  `tagName`:[optional] Song category / genre for search bias—e.g. \"儿歌\", \"流行\", \"摇滚\".",
+                PropertyList({
+                    Property("text", kPropertyTypeString),
+                    Property("singerName", kPropertyTypeString, std::string("")),
+                    Property("songName", kPropertyTypeString, std::string("")),
+                    Property("tagName", kPropertyTypeString, std::string(""))
+                }),
+                [music](const PropertyList& properties) -> ReturnValue {
+                    auto text = properties["text"].value<std::string>();
+                    auto singer = properties["singerName"].value<std::string>();
+                    auto song = properties["songName"].value<std::string>();
+                    auto tag = properties["tagName"].value<std::string>();
+                    return music->Play(text.c_str(), song.c_str(), singer.c_str(), tag.c_str());
+                });
+        AddTool("self.music.stop",
+                "Stop current music playback and release resources.",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    music->Quit();
+                    return true;
+                });
+
+        AddTool("self.music.next",
+                "Play next track (only valid for local playlist/continuous playback).",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    return music->Next();
+                });
+
+        AddTool("self.music.prev",
+                "Play previous track (only valid for local playlist/continuous playback).",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    return music->Previous();
+                });
+
+        AddTool("self.music.set_play_mode",
+                "Set online music queue playback mode. repeat_mode: off/one/all. shuffle: true/false.",
+                PropertyList({
+                    Property("repeat_mode", kPropertyTypeString),
+                    Property("shuffle", kPropertyTypeBoolean)
+                }),
+                [](const PropertyList &properties) -> ReturnValue
+                {
+                    return false;
+                });
+
+        AddTool("self.music.get_queue",
+                "Get current online music queue/session state, including mode and upcoming items.",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    return music->GetSongList();
+                });
+    }
     
     auto backlight = board.GetBacklight();
     if (backlight) {

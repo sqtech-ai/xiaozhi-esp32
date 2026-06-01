@@ -21,6 +21,7 @@
 LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
 LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_awesome_30_4);
+LV_FONT_DECLARE(font_puhui_basic_16_4);
 
 void LcdDisplay::InitializeLcdThemes() {
     auto text_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_TEXT_FONT);
@@ -848,8 +849,8 @@ void LcdDisplay::SetupUI() {
 
     /* Middle layer: preview_image_ - centered display */
     preview_image_ = lv_image_create(screen);
-    lv_obj_set_size(preview_image_, width_ / 2, height_ / 2);
-    lv_obj_align(preview_image_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_size(preview_image_, width_, height_);
+    lv_obj_align(preview_image_, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
 
     /* Layer 1: Top bar - for status icons */
@@ -992,6 +993,28 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+
+    auto font = std::make_shared<LvglBuiltInFont>(&font_puhui_basic_16_4);
+    music_title_label_ = lv_label_create(screen);
+    lv_label_set_text(music_title_label_, "");
+    //lv_obj_set_style_text_font(music_title_label_, font->font(), 0);
+    lv_obj_set_width(music_title_label_, LV_HOR_RES);
+    lv_label_set_long_mode(music_title_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(music_title_label_, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_bg_color(music_title_label_, lvgl_theme->background_color(), 0);
+    lv_obj_set_style_bg_opa(music_title_label_, LV_OPA_30, 0);
+    lv_obj_set_style_text_color(music_title_label_, lv_color_hex(0x1A1AEA), 0);
+    lv_obj_align_to(music_title_label_, top_bar_, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 0);
+    lv_obj_add_flag(music_title_label_, LV_OBJ_FLAG_HIDDEN);
+
+    music_progress_label_ = lv_label_create(screen);
+    lv_label_set_text(music_progress_label_, "");
+    lv_obj_set_style_text_font(music_progress_label_, font->font(), 0);
+    lv_obj_set_width(music_progress_label_, LV_HOR_RES >> 1);
+    lv_obj_set_style_text_align(music_progress_label_, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_color(music_progress_label_, lvgl_theme->text_color(), 0);
+    lv_obj_align_to(music_progress_label_, music_title_label_, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 0);
+    lv_obj_add_flag(music_progress_label_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
@@ -1016,8 +1039,18 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
     auto img_dsc = preview_image_cached_->image_dsc();
     lv_image_set_src(preview_image_, img_dsc);
     if (img_dsc->header.w > 0 && img_dsc->header.h > 0) {
-        // zoom factor 0.5
-        lv_image_set_scale(preview_image_, 128 * width_ / img_dsc->header.w);
+        const lv_coord_t iw = img_dsc->header.w;
+        const lv_coord_t ih = img_dsc->header.h;
+        int64_t zw = (static_cast<int64_t>(256) * width_) / iw;
+        int64_t zh = (static_cast<int64_t>(256) * height_) / ih;
+        int64_t z = std::max(zw, zh);
+        if (z < 1) {
+            z = 1;
+        }
+        if (z > 8192) {
+            z = 8192;
+        }
+        lv_image_set_scale(preview_image_, static_cast<int32_t>(z));
     }
 
     // Hide emoji_box_
@@ -1027,7 +1060,7 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
     lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
     esp_timer_stop(preview_timer_);
-    ESP_ERROR_CHECK(esp_timer_start_once(preview_timer_, PREVIEW_IMAGE_DURATION_MS * 1000));
+    //ESP_ERROR_CHECK(esp_timer_start_once(preview_timer_, PREVIEW_IMAGE_DURATION_MS * 1000));
 }
 
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
@@ -1306,5 +1339,36 @@ void LcdDisplay::SetHideSubtitle(bool hide) {
                 lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
             }
         }
+    }
+}
+
+void LcdDisplay::SetMusicTitle(const char* title) {
+    DisplayLockGuard lock(this);
+    if(title == nullptr || title[0] == '\0') {
+        lv_label_set_text(music_title_label_, "");
+        lv_obj_add_flag(music_title_label_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_label_set_text(music_title_label_, title);
+        lv_obj_remove_flag(music_title_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void LcdDisplay::SetMusicProgress(int current_ms, int total_ms, const char* lyric) {
+    SetChatMessage("system", lyric);
+    DisplayLockGuard lock(this);
+    if(total_ms <= 0 || current_ms > total_ms) {
+        lv_label_set_text(music_progress_label_, "");
+        lv_obj_add_flag(music_progress_label_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        total_ms /= 1000;
+        const int t_m = total_ms / 60;
+        const int t_s = total_ms % 60;
+        current_ms /= 1000;
+        const int c_m = current_ms / 60;
+        const int c_s = current_ms % 60;
+        char buf[24] = {0};
+        snprintf(buf, sizeof(buf), "%02d:%02d/%02d:%02d", c_m, c_s, t_m, t_s);
+        lv_label_set_text(music_progress_label_, buf);
+        lv_obj_remove_flag(music_progress_label_, LV_OBJ_FLAG_HIDDEN);
     }
 }

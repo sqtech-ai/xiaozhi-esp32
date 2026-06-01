@@ -306,7 +306,11 @@ void AudioService::AudioOutputTask() {
             codec_->EnableOutput(true);
         }
 
-        codec_->OutputData(task->pcm);
+        if (music_playing_) {
+            esp_timer_stop(audio_power_timer_);
+        } else {
+            codec_->OutputData(task->pcm);
+        }
 
         /* Update the last output time */
         last_output_time_ = std::chrono::steady_clock::now();

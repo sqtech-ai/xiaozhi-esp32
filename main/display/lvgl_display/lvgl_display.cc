@@ -272,3 +272,9 @@ bool LvglDisplay::SnapshotToJpeg(std::string& jpeg_data, int quality) {
     return false;
 #endif
 }
+
+void LvglDisplay::SetMusicTitle(const char* title) {
+}
+
+void LvglDisplay::SetMusicProgress(int current_ms, int total_ms, const char* lyric) {
+}

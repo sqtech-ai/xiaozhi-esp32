@@ -64,6 +64,7 @@ public:
      */
     void Run();
 
+    DeviceStateMachine& GetDeviceStateMachine() { return state_machine_; }
     DeviceState GetDeviceState() const { return state_machine_.GetState(); }
     bool IsVoiceDetected() const { return audio_service_.IsVoiceDetected(); }
     
@@ -121,6 +122,8 @@ public:
      * This includes closing audio channel, resetting protocol and ota objects
      */
     void ResetProtocol();
+
+    void CloseAudioChannelIfOpened();
 
 private:
     Application();

@@ -4,6 +4,7 @@
 #include "display/display.h"
 #include "display/oled_display.h"
 #include "assets/lang_config.h"
+#include "esp32_music.h"
 
 #include <esp_log.h>
 #include <esp_ota_ops.h>
@@ -60,6 +61,11 @@ Display* Board::GetDisplay() {
 
 Camera* Board::GetCamera() {
     return nullptr;
+}
+
+Music* Board::GetMusic() {
+    static Esp32Music music;
+    return &music;
 }
 
 Led* Board::GetLed() {

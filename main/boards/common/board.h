@@ -12,6 +12,7 @@
 #include "led/led.h"
 #include "backlight.h"
 #include "camera.h"
+#include "music.h"
 #include "assets.h"
 
 /**
@@ -73,6 +74,7 @@ public:
     virtual bool GetTemperature(float& esp32temp);
     virtual Display* GetDisplay();
     virtual Camera* GetCamera();
+    virtual Music* GetMusic();
     virtual NetworkInterface* GetNetwork() = 0;
     virtual void StartNetwork() = 0;
     virtual void SetNetworkEventCallback(NetworkEventCallback callback) { (void)callback; }

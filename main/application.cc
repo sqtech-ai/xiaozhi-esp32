@@ -9,6 +9,8 @@
 #include "mcp_server.h"
 #include "assets.h"
 #include "settings.h"
+#include "IOTSdk.h"
+#include "../components/iotsdk/EspBoard.cpp"
 
 #include <cstring>
 #include <esp_log.h>
@@ -317,6 +319,23 @@ void Application::HandleActivationDoneEvent() {
     Schedule([this]() {
         // Play the success sound to indicate the device is ready
         audio_service_.PlaySound(Lang::Sounds::OGG_SUCCESS);
+    });
+    Schedule([this]() {
+        // Initialize the IoT SDK
+        IOTSdk::Singleton().SetOnGetBoardHttp([](int action) -> std::unique_ptr<BoardHttp> {
+            return std::make_unique<BoardHttpImpl>();
+        });
+        cJSON* root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "deviceId", "");
+        cJSON_AddStringToObject(root, "appLicenseId", "");
+        cJSON_AddStringToObject(root, "appKey", "");
+        cJSON_AddStringToObject(root, "serverToken", "");
+        cJSON_AddStringToObject(root, "regionCode", "");
+        cJSON_AddStringToObject(root, "servicePackageCode", "");
+        cJSON_AddStringToObject(root, "env", "test");
+        char* args = cJSON_PrintUnformatted(root);
+        IOTSdk::Singleton().Init("./", args);
+        cJSON_free(args);
     });
 }
 
@@ -660,6 +679,9 @@ void Application::DismissAlert() {
 }
 
 void Application::ToggleChatState() {
+    ESP_LOGI(TAG, "Toggle chat state");
+    audio_service_.ToggleMusicPlaying(false);
+    Board::GetInstance().GetMusic()->ToggleQuit();
     xEventGroupSetBits(event_group_, MAIN_EVENT_TOGGLE_CHAT);
 }
 
@@ -1129,3 +1151,13 @@ void Application::ResetProtocol() {
     });
 }
 
+void Application::CloseAudioChannelIfOpened() {
+    if (!protocol_) {
+        return;
+    }
+    Schedule([this]() {
+        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+            protocol_->CloseAudioChannel();
+        }
+    });
+}

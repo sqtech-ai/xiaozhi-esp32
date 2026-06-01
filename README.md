@@ -1,173 +1,167 @@
-# An MCP-based Chatbot
+# xiaozhi-esp32-minimal
 
-(English | [中文](README_zh.md) | [日本語](README_ja.md))
+基于 [小智 AI 聊天机器人（xiaozhi-esp32）](https://github.com/78/xiaozhi-esp32) 源码裁剪/扩展的 ESP32 固件工程，在保留小智语音对话能力的基础上，集成 **IOTSdk 在线音乐播放** 能力（咪咕音乐内容源）。
 
-## Introduction
+## 上游项目
 
-👉 [Human: Give AI a camera vs AI: Instantly finds out the owner hasn't washed hair for three days【bilibili】](https://www.bilibili.com/video/BV1bpjgzKEhd/)
+本工程源码基于上游仓库 **[78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)** 的 **`v2.2.4`** 标签开发。
 
-👉 [Handcraft your AI girlfriend, beginner's guide【bilibili】](https://www.bilibili.com/video/BV1XnmFYLEJN/)
+| 项目 | 说明 |
+|------|------|
+| 上游仓库 | https://github.com/78/xiaozhi-esp32 |
+| 基准版本 | [v2.2.4](https://github.com/78/xiaozhi-esp32/tree/v2.2.4) |
+| 上游许可证 | MIT License |
 
-As a voice interaction entry, the XiaoZhi AI chatbot leverages the AI capabilities of large models like Qwen / DeepSeek, and achieves multi-terminal control via the MCP protocol.
+上游项目提供 MCP 语音交互、多板型支持、WebSocket/MQTT 通信等基础能力；本工程在此基础上增加在线音乐模块，并接入速启科技 IOTSdk。
 
-<img src="docs/mcp-based-graph.jpg" alt="Control everything via MCP" width="320">
+## 在线音乐扩展说明
 
-## Version Notes
+本工程通过 **`components/iotsdk`** 组件集成预编译库 `migumusic.a`，对外暴露两类核心接口：
 
-The current v2 version is incompatible with the v1 partition table, so it is not possible to upgrade from v1 to v2 via OTA. For partition table details, see [partitions/v2/README.md](partitions/v2/README.md).
+| 模块 | 头文件 | 文档 | 职责 |
+|------|--------|------|------|
+| **IOTSdk** | `components/iotsdk/IOTSdk.h` | [IOTSdk.md](components/iotsdk/docs/IOTSdk.md) | 设备鉴权、咪咕/OpenAPI 请求、搜歌、歌曲信息查询、播放上报等 |
+| **IMusicPlayer** | `components/iotsdk/IMusicPlayer.h` | [IMusicPlayer.md](components/iotsdk/docs/IMusicPlayer.md) | 在线搜歌、拉流解码、PCM 输出、封面/歌词/进度回调 |
 
-All hardware running v1 can be upgraded to v2 by manually flashing the firmware.
+### 集成架构（摘要）
 
-The stable version of v1 is 1.9.2. You can switch to v1 by running `git checkout v1`. The v1 branch will be maintained until February 2026.
+```text
+设备激活完成
+    ↓
+IOTSdk::SetOnGetBoardHttp()   // 注册板载 HTTP（Init 之前）
+    ↓
+IOTSdk::Init(workspace, args) // 鉴权参数见下文「IOTSdk 初始化」
+    ↓
+IMusicPlayer::Init()          // 播放器配置
+    ↓
+Esp32Music（main/boards/common/esp32_music.cc）
+    ├─ Search / Play / Next / Previous
+    ├─ 封面 → Display::SetPreviewImage
+    ├─ 歌名 → Display::SetMusicTitle
+    ├─ 进度/歌词 → Display::SetMusicProgress
+    └─ PCM → AudioCodec 输出
+    ↓
+MCP 工具（main/mcp_server.cc）
+    self.music.play_online / stop / next / prev / get_queue
+```
 
-### Features Implemented
+### 主要能力
 
-- Wi-Fi / ML307 Cat.1 4G
-- Offline voice wake-up [ESP-SR](https://github.com/espressif/esp-sr)
-- Supports two communication protocols ([Websocket](docs/websocket.md) or MQTT+UDP)
-- Uses OPUS audio codec
-- Voice interaction based on streaming ASR + LLM + TTS architecture
-- Speaker recognition, identifies the current speaker [3D Speaker](https://github.com/modelscope/3D-Speaker)
-- OLED / LCD display, supports emoji display
-- Battery display and power management
-- Multi-language support (Chinese, English, Japanese)
-- Supports ESP32-C3, ESP32-S3, ESP32-P4 chip platforms
-- Device-side MCP for device control (Speaker, LED, Servo, GPIO, etc.)
-- Cloud-side MCP to extend large model capabilities (smart home control, PC desktop operation, knowledge search, email, etc.)
-- Customizable wake words, fonts, emojis, and chat backgrounds with online web-based editing ([Custom Assets Generator](https://github.com/78/xiaozhi-assets-generator))
+- **语音/云端控制播歌**：通过 MCP 工具 `self.music.play_online` 等触发在线搜索与播放
+- **咪咕音乐内容**：搜索、试听拉流、封面显示、歌词与播放进度展示
+- **与对话共存**：播放时抢占 TTS/上行通道；连接云端或 TTS 播报时自动打断音乐（见 `Esp32Music`）
 
-## Hardware
+### 运行效果
 
-### Breadboard DIY Practice
+在线播放咪咕音乐时的设备界面示例：顶部状态栏显示网络与时间，中部展示歌曲封面，下方显示歌名/歌手、播放进度（`01:09/05:43`）与当前歌词。
 
-See the Feishu document tutorial:
+<a href="components/iotsdk/docs/music-player-demo.png" target="_blank" title="在线音乐播放运行效果">
+  <img src="components/iotsdk/docs/music-player-demo.png" alt="在线音乐播放运行效果：西海情歌 - 刀郎" width="480" />
+</a>
 
-👉 ["XiaoZhi AI Chatbot Encyclopedia"](https://ccnphfhqs21z.feishu.cn/wiki/F5krwD16viZoF0kKkvDcrZNYnhb?from=from_copylink)
+更完整的 API 说明、回调约定、编译依赖与集成检查清单，请参阅：
 
-Breadboard demo:
+- [components/iotsdk/docs/IOTSdk.md](components/iotsdk/docs/IOTSdk.md)
+- [components/iotsdk/docs/IMusicPlayer.md](components/iotsdk/docs/IMusicPlayer.md)
 
-![Breadboard Demo](docs/v1/wiring2.jpg)
+## 开发环境
 
-### Supports 70+ Open Source Hardware (Partial List)
+| 工具 | 版本要求 |
+|------|----------|
+| **ESP-IDF** | **v5.5.2**（必须） |
+| 编辑器 | Cursor / VSCode + ESP-IDF 插件 |
+| 目标芯片 | ESP32-S3 / ESP32-C3 等（依板型配置） |
 
-- <a href="https://oshwhub.com/li-chuang-kai-fa-ban/li-chuang-shi-zhan-pai-esp32-s3-kai-fa-ban" target="_blank" title="LiChuang ESP32-S3 Development Board">LiChuang ESP32-S3 Development Board</a>
-- <a href="https://github.com/espressif/esp-box" target="_blank" title="Espressif ESP32-S3-BOX3">Espressif ESP32-S3-BOX3</a>
-- <a href="https://docs.m5stack.com/zh_CN/core/CoreS3" target="_blank" title="M5Stack CoreS3">M5Stack CoreS3</a>
-- <a href="https://docs.m5stack.com/en/atom/Atomic%20Echo%20Base" target="_blank" title="AtomS3R + Echo Base">M5Stack AtomS3R + Echo Base</a>
-- <a href="https://gf.bilibili.com/item/detail/1108782064" target="_blank" title="Magic Button 2.4">Magic Button 2.4</a>
-- <a href="https://www.waveshare.net/shop/ESP32-S3-Touch-AMOLED-1.8.htm" target="_blank" title="Waveshare ESP32-S3-Touch-AMOLED-1.8">Waveshare ESP32-S3-Touch-AMOLED-1.8</a>
-- <a href="https://github.com/Xinyuan-LilyGO/T-Circle-S3" target="_blank" title="LILYGO T-Circle-S3">LILYGO T-Circle-S3</a>
-- <a href="https://oshwhub.com/tenclass01/xmini_c3" target="_blank" title="XiaGe Mini C3">XiaGe Mini C3</a>
-- <a href="https://oshwhub.com/movecall/cuican-ai-pendant-lights-up-y" target="_blank" title="Movecall CuiCan ESP32S3">CuiCan AI Pendant</a>
-- <a href="https://github.com/WMnologo/xingzhi-ai" target="_blank" title="WMnologo-Xingzhi-1.54">WMnologo-Xingzhi-1.54TFT</a>
-- <a href="https://www.seeedstudio.com/SenseCAP-Watcher-W1-A-p-5979.html" target="_blank" title="SenseCAP Watcher">SenseCAP Watcher</a>
-- <a href="https://www.bilibili.com/video/BV1BHJtz6E2S/" target="_blank" title="ESP-HI Low Cost Robot Dog">ESP-HI Low Cost Robot Dog</a>
+> 请使用 ESP-IDF **5.5.2** 工具链编译本工程，其他版本可能存在组件或 API 不兼容问题。
 
-<div style="display: flex; justify-content: space-between;">
-  <a href="docs/v1/lichuang-s3.jpg" target="_blank" title="LiChuang ESP32-S3 Development Board">
-    <img src="docs/v1/lichuang-s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/espbox3.jpg" target="_blank" title="Espressif ESP32-S3-BOX3">
-    <img src="docs/v1/espbox3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/m5cores3.jpg" target="_blank" title="M5Stack CoreS3">
-    <img src="docs/v1/m5cores3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/atoms3r.jpg" target="_blank" title="AtomS3R + Echo Base">
-    <img src="docs/v1/atoms3r.jpg" width="240" />
-  </a>
-  <a href="docs/v1/magiclick.jpg" target="_blank" title="Magic Button 2.4">
-    <img src="docs/v1/magiclick.jpg" width="240" />
-  </a>
-  <a href="docs/v1/waveshare.jpg" target="_blank" title="Waveshare ESP32-S3-Touch-AMOLED-1.8">
-    <img src="docs/v1/waveshare.jpg" width="240" />
-  </a>
-  <a href="docs/v1/lilygo-t-circle-s3.jpg" target="_blank" title="LILYGO T-Circle-S3">
-    <img src="docs/v1/lilygo-t-circle-s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/xmini-c3.jpg" target="_blank" title="XiaGe Mini C3">
-    <img src="docs/v1/xmini-c3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/movecall-cuican-esp32s3.jpg" target="_blank" title="CuiCan">
-    <img src="docs/v1/movecall-cuican-esp32s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/wmnologo_xingzhi_1.54.jpg" target="_blank" title="WMnologo-Xingzhi-1.54">
-    <img src="docs/v1/wmnologo_xingzhi_1.54.jpg" width="240" />
-  </a>
-  <a href="docs/v1/sensecap_watcher.jpg" target="_blank" title="SenseCAP Watcher">
-    <img src="docs/v1/sensecap_watcher.jpg" width="240" />
-  </a>
-  <a href="docs/v1/esp-hi.jpg" target="_blank" title="ESP-HI Low Cost Robot Dog">
-    <img src="docs/v1/esp-hi.jpg" width="240" />
-  </a>
-</div>
+### 编译
 
-## Software
+```bash
+# 安装并导出 ESP-IDF v5.5.2 环境后
+idf.py set-target esp32s3   # 按实际板型选择
+idf.py build
+idf.py flash monitor
+```
 
-### Firmware Flashing
+### 编译注意事项
 
-For beginners, it is recommended to use the firmware that can be flashed without setting up a development environment.
+- 工程 `main` 依赖 `iotsdk` 组件（预编译 `migumusic.a`）
+- 需在 `sdkconfig` 中启用 **`CONFIG_MBEDTLS_DES_C=y`**（IOTSdk 加解密依赖 DES；`sdkconfig.defaults.*` 已包含示例配置）
+- 托管组件需包含 `espressif/esp_audio_codec`、`espressif/esp_audio_effects` 等（见 `main/idf_component.yml`）
 
-The firmware connects to the official [xiaozhi.me](https://xiaozhi.me) server by default. Personal users can register an account to use the Qwen real-time model for free.
+## IOTSdk 初始化
 
-👉 [Beginner's Firmware Flashing Guide](https://ccnphfhqs21z.feishu.cn/wiki/Zpz4wXBtdimBrLk25WdcXzxcnNS)
+设备完成激活后，会在 `main/application.cc` 中初始化 IOTSdk。初始化参数为 JSON 字符串，**各字段值须向速启科技申请**，请勿使用空字符串上线：
 
-### Development Environment
+```cpp
+cJSON_AddStringToObject(root, "deviceId", "");           // 设备唯一标识（必填）
+cJSON_AddStringToObject(root, "appLicenseId", "");       // 许可证 ID（必填）
+cJSON_AddStringToObject(root, "appKey", "");             // App Key（必填）
+cJSON_AddStringToObject(root, "serverToken", "");        // 服务端 Token（必填）
+cJSON_AddStringToObject(root, "regionCode", "");         // 区域编码（必填）
+cJSON_AddStringToObject(root, "servicePackageCode", ""); // 服务套餐码（必填）
+cJSON_AddStringToObject(root, "env", "test");            // 环境：test（测试）/ prod（生产）
+IOTSdk::Singleton().Init("./", args);
+```
 
-- Cursor or VSCode
-- Install ESP-IDF plugin, select SDK version 5.4 or above
-- Linux is better than Windows for faster compilation and fewer driver issues
-- This project uses Google C++ code style, please ensure compliance when submitting code
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `deviceId` | 是 | 设备唯一标识 |
+| `appLicenseId` | 是 | 许可证 ID |
+| `appKey` | 是 | 应用 Key |
+| `serverToken` | 是 | 服务端 Token |
+| `regionCode` | 是 | 区域编码 |
+| `servicePackageCode` | 是 | 服务套餐码 |
+| `env` | 否 | `test` 测试环境，`prod` 生产环境 |
 
-### Developer Documentation
+**请在编译/烧录前，将向速启科技申请到的参数填入上述 JSON 字段。** 未配置有效参数时，IOTSdk 初始化及在线音乐功能将无法正常工作。
 
-- [Custom Board Guide](docs/custom-board.md) - Learn how to create custom boards for XiaoZhi AI
-- [MCP Protocol IoT Control Usage](docs/mcp-usage.md) - Learn how to control IoT devices via MCP protocol
-- [MCP Protocol Interaction Flow](docs/mcp-protocol.md) - Device-side MCP protocol implementation
-- [MQTT + UDP Hybrid Communication Protocol Document](docs/mqtt-udp.md)
-- [A detailed WebSocket communication protocol document](docs/websocket.md)
+初始化前还须注册板载 HTTP 工厂（`SetOnGetBoardHttp`），实现参考 `components/iotsdk/EspBoard.cpp`。
 
-## Large Model Configuration
+## 目录结构（与本扩展相关）
 
-If you already have a XiaoZhi AI chatbot device and have connected to the official server, you can log in to the [xiaozhi.me](https://xiaozhi.me) console for configuration.
+```text
+components/iotsdk/
+├── migumusic.a          # IOTSdk + IMusicPlayer 预编译库
+├── IOTSdk.h             # SDK 接口
+├── IMusicPlayer.h       # 播放器接口
+├── EspBoard.cpp         # 板载 HTTP/MQTT 适配（由 main 引用）
+└── docs/
+    ├── IOTSdk.md
+    ├── IMusicPlayer.md
+    └── music-player-demo.png  # 在线音乐播放运行效果截图
 
-👉 [Backend Operation Video Tutorial (Old Interface)](https://www.bilibili.com/video/BV1jUCUY2EKM/)
+main/boards/common/
+├── esp32_music.h/.cc    # 板级音乐封装，对接 IMusicPlayer 与 Display/Audio
+└── music.h              # Music 抽象接口
 
-## Related Open Source Projects
+main/mcp_server.cc       # self.music.* MCP 工具注册
+main/application.cc      # IOTSdk 初始化入口
+```
 
-For server deployment on personal computers, refer to the following open-source projects:
+## MCP 音乐工具
 
-- [xinnan-tech/xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server) Python server
-- [joey-zhou/xiaozhi-esp32-server-java](https://github.com/joey-zhou/xiaozhi-esp32-server-java) Java server
-- [AnimeAIChat/xiaozhi-server-go](https://github.com/AnimeAIChat/xiaozhi-server-go) Golang server
-- [hackers365/xiaozhi-esp32-server-golang](https://github.com/hackers365/xiaozhi-esp32-server-golang) Golang server
+| 工具名 | 说明 |
+|--------|------|
+| `self.music.play_online` | 在线搜歌并播放（`text` 必填） |
+| `self.music.stop` | 停止播放并退出音乐模式 |
+| `self.music.next` | 下一首 |
+| `self.music.prev` | 上一首 |
+| `self.music.get_queue` | 获取当前播放队列（JSON） |
+| `self.music.set_play_mode` | 占位接口，当前未实现 |
 
-Other client projects using the XiaoZhi communication protocol:
+## 许可证
 
-- [huangjunsen0406/py-xiaozhi](https://github.com/huangjunsen0406/py-xiaozhi) Python client
-- [TOM88812/xiaozhi-android-client](https://github.com/TOM88812/xiaozhi-android-client) Android client
-- [100askTeam/xiaozhi-linux](http://github.com/100askTeam/xiaozhi-linux) Linux client by 100ask
-- [78/xiaozhi-sf32](https://github.com/78/xiaozhi-sf32) Bluetooth chip firmware by Sichuan
-- [QuecPython/solution-xiaozhiAI](https://github.com/QuecPython/solution-xiaozhiAI) QuecPython firmware by Quectel
+- 基于 [xiaozhi-esp32 v2.2.4](https://github.com/78/xiaozhi-esp32/tree/v2.2.4) 修改的部分遵循上游 **MIT License**，详见 [LICENSE](LICENSE)。
+- `components/iotsdk/migumusic.a` 为预编译二进制库，其使用与分发须遵守速启科技/IOTSdk 相关授权约定，**不等同于 MIT 开源源码**。
 
-Custom Assets Tools:
+## 联系我们
 
-- [78/xiaozhi-assets-generator](https://github.com/78/xiaozhi-assets-generator) Custom Assets Generator (Wake words, fonts, emojis, backgrounds)
+商务合作与SDK获取请联系：
 
-## About the Project
+[service@suqi.tech](mailto:service@suqi.tech)
 
-This is an open-source ESP32 project, released under the MIT license, allowing anyone to use it for free, including for commercial purposes.
-
-We hope this project helps everyone understand AI hardware development and apply rapidly evolving large language models to real hardware devices.
-
-If you have any ideas or suggestions, please feel free to raise Issues or join our [Discord](https://discord.gg/C759fGMBcZ) or QQ group: 994694848
-
-## Star History
-
-<a href="https://star-history.com/#78/xiaozhi-esp32&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date" />
- </picture>
+18102203284
+<a href="docs/企业微信截图.png" target="_blank" title="企业微信">
+    <img src="docs/企业微信截图.png" width="240" />
 </a>
