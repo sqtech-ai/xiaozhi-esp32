@@ -13,6 +13,10 @@
 /**
  * 取消播放
  */
+ #define EMP_RET_PAUSE 3
+/**
+ * 取消播放
+ */
 #define EMP_RET_CANCEL 2
 /**
  * 音乐流播放结束
@@ -86,6 +90,16 @@ public:
      * @return 错误码
      */
     virtual int Previous() = 0;
+    /**
+     * 暂停播放
+     * @return 错误码
+     */
+    virtual int Pause() = 0;
+    /**
+     * 继续播放
+     * @return 错误码
+     */
+    virtual int Resume() = 0;
      /**
      * 是否正在播放
      */
@@ -123,6 +137,11 @@ public:
      * 设置播放状态为停止(仅设置标志，不等待；区别于Quit()，后者会等待任务结束)
      */
     void ToggleQuit() { quit_ = true; }
+    /**
+     * 是否暂停
+     * @return 是否暂停
+     */
+    bool IsPaused() const { return paused_; }
     /**
      * 设置音频输出(采样率、通道数)
      * @param sample_rate 采样率
@@ -164,6 +183,7 @@ public:
     void SetOnProgress(std::function<void(int current_ms, int total_ms, const char* lyric_previous, const char* lyric_current, const char* lyric_next)> on_progress) { on_progress_ = on_progress; }
 protected:
     bool quit_ = false;
+    bool paused_ = false;
     int err_code_ = 0;
     const char* err_message_ = nullptr;
     int audio_sink_sample_rate_ = 0, audio_sink_channels_ = 0;

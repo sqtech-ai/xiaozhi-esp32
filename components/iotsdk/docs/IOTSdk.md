@@ -33,7 +33,7 @@
 
 ## 3. HTTP 连接意图（action）
 
-通过 `SetOnGetBoardHttp` 注册板载 HTTP 工厂时，SDK 会按 **action** 区分连接用途；回调须返回 [`BoardHttp`](../EspBoard.h) 实现实例。
+通过 `SetOnGetBoardHttp` 注册板载 HTTP 工厂时（**4G 板卡必选，WiFi 板卡通常省略**），SDK 会按 **action** 区分连接用途；回调须返回 [`BoardHttp`](../EspBoard.h) 实现实例。
 
 | 宏 | 值 | 说明 |
 |----|-----|------|
@@ -95,11 +95,14 @@ virtual void SetOnGetBoardHttp(
 
 **说明（摘自头文件）：**
 
-- **必选**；须在 **`Init()` 之前** 注册。
-- `BoardHttp` 实现可参考 [`EspBoard.cpp`](../EspBoard.cpp)（`BoardHttpImpl` 包装板载网络栈的 `Http`）。
-- `EspMusicPlayer` 封面下载、歌词下载、音乐拉流均通过该回调按 `action` 创建 `BoardHttp` 实例。
+1. 须在 **`Init()` 之前** 注册（若需要注册）。
+2. `BoardHttp` 实现可参考 [`EspBoard.cpp`](../EspBoard.cpp)（`BoardHttpImpl` 包装板载网络栈的 `Http`）。
+3. **板载 4G 模组**：**必须**调用该函数设置回调，否则无法使用网络功能。
+4. **板载 WiFi 模组**：**不建议**调用该函数设置回调，更节省内存、性能更优。
 
-**回调示例：**
+若已注册该回调，`EspMusicPlayer` 封面下载、歌词下载、音乐拉流均通过该回调按 `action` 创建 `BoardHttp` 实例。
+
+**回调示例（4G 板卡）：**
 
 ```cpp
 IOTSdk::Singleton().SetOnGetBoardHttp([](int action) -> std::unique_ptr<BoardHttp> {
@@ -311,7 +314,7 @@ virtual int GetMusicInfo(const std::string& input, std::string& output, int time
 
 ## 5. 集成注意点（摘要）
 
-1. **板载 HTTP**：先 `SetOnGetBoardHttp`，再 `Init`；`args` 中必填项需齐全，并与 `env`（prod/test）一致；`BoardHttp` 实现可参考 [`EspBoard.cpp`](../EspBoard.cpp)。
+1. **板载 HTTP**：**4G 模组**须在 `Init()` 之前注册 `SetOnGetBoardHttp`，否则无法使用网络功能；**WiFi 模组**不建议注册，更省内存、性能更优。若注册，`BoardHttp` 实现可参考 [`EspBoard.cpp`](../EspBoard.cpp)。`args` 中必填项需齐全，并与 `env`（prod/test）一致。
 2. 按第 3 节 **action** 区分咪咕 API（`IOTSDK_MIGU_HTTPS`）、音乐流（`IOTSDK_MIGU_MUSIC`）、OpenAPI（`IOTSDK_OPENAPI_HTTPS`）。
 3. **JSON 格式**：字段名、类型需与文档及头文件注释一致。
 4. **`GetMusicInfo`**、**`SearchByKey`**、**`SearchSong`**、**`SearchSongEx`**、**`Report`** 的 `provider` 仅支持 **`migu`**；**`SearchPlay`** 另支持 **`xmly`**（见第 4.3 节）。

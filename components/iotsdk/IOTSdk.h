@@ -84,10 +84,12 @@ public:
      */
     virtual int Init(const std::string& workspace, const std::string& args) = 0;
     /**
-     * 设置获取板载HTTP客户端回调(必选)
+     * 设置获取板载HTTP客户端回调
      * 特别注意：
      * 1.必须在IOTSdk::Init()之前注册
      * 2.BoardHttp实现可以参考EspBoard.cpp
+     * 3.如果是板载4G模组，必须调用该函数设置回调，否则无法使用网络功能
+     * 4.如果是板载WiFi模组，不建议调用该函数设置回调，更节省内存，性能更优
      */
      virtual void SetOnGetBoardHttp(std::function<std::unique_ptr<BoardHttp>(int action)> on_get_board_http) = 0;
     /**

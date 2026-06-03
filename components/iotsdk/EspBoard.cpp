@@ -2,7 +2,6 @@
 //  EspBoard.cpp
 //
 #include <memory>
-#include <jpeg_decoder.h>
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include "board.h"
@@ -94,7 +93,8 @@ private:
     std::unique_ptr<Mqtt> mqtt_;
 };
 
-#ifdef HAVE_LVGL
+#if defined(HAVE_LVGL) && defined(CONFIG_IDF_TARGET_ESP32S3)
+#include <jpeg_decoder.h>
 std::unique_ptr<LvglImage> JpegToImage(char* data, int datalen, int target_width, int target_height)
 {
     if (data == nullptr || datalen < 3) {

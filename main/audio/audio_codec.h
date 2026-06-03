@@ -39,10 +39,14 @@ public:
     inline bool input_enabled() const { return input_enabled_; }
     inline bool output_enabled() const { return output_enabled_; }
 
+    virtual void SetExclusive(bool exclusive) { exclusive_ = exclusive; }
+    virtual bool IsExclusive() const { return exclusive_; }
+    virtual void OutputData(const int16_t* data, int samples);
 protected:
     i2s_chan_handle_t tx_handle_ = nullptr;
     i2s_chan_handle_t rx_handle_ = nullptr;
 
+    bool exclusive_ = false;
     bool duplex_ = false;
     bool input_reference_ = false;
     bool input_enabled_ = false;

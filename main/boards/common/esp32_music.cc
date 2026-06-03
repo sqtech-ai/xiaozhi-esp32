@@ -2,13 +2,11 @@
 #include <cstring>
 #include <vector>
 #include "board.h"
-#include "display.h"
 #include "audio_codec.h"
 #include "lvgl_display.h"
 #include "esp32_music.h"
 #include "IMusicPlayer.h"
 #include "application.h"
-
 
 #define TAG "Esp32Music"
 
@@ -16,22 +14,22 @@ std::unique_ptr<LvglImage> JpegToImage(char* data, int datalen, int target_width
 
 Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
     auto& app = Application::GetInstance();
-    auto display = dynamic_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
     auto codec = Board::GetInstance().GetAudioCodec();
+    auto display = dynamic_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
     app.GetDeviceStateMachine().AddStateChangeListener([this](DeviceState prev, DeviceState curr) {
         ESP_LOGI(TAG, "DeviceStateChange: prev=%d curr=%d", prev, curr);
         if (music_player_->IsPlaying()) {
             if (curr == kDeviceStateConnecting || curr == kDeviceStateSpeaking) {
-                ToggleQuit();
+                Pause();
             }
         }
     });
     music_player_->SetOnStarted([display](const char* songName, const char* singerName) {
+        ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
         std::string title = songName;
         if(singerName && *singerName) {
             title += " - " + std::string(singerName);
         }
-        ESP_LOGI(TAG, "OnPlaybackStarted: %s", title.c_str());
         display->SetMusicTitle(title.c_str());
     });
     music_player_->SetOnFinished([this, display](int code, const char* message) {
@@ -43,7 +41,6 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
             if(code == EMP_RET_EOS) {
                 Next();
             } else {
-                ToggleQuit();
                 ExitMusicPlaybackMode();//退出播放模式
             }
         });
@@ -58,10 +55,7 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
         if (pcm == nullptr || length <= 0 || (length % (int)sizeof(int16_t)) != 0) {
             return;
         }
-        const size_t samples = static_cast<size_t>(length) / sizeof(int16_t);
-        std::vector<int16_t> pcm_data(samples);
-        memcpy(pcm_data.data(), pcm, static_cast<size_t>(length));
-        codec->OutputData(pcm_data);
+        codec->OutputData((const int16_t*)pcm, length >> 1);
     });
     music_player_->SetOnCoverImageReady([display](char* data, int datalen) {
         if (data == nullptr || datalen <= 0) {
@@ -72,7 +66,7 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
             display->SetPreviewImage(std::move(image));
         }
     });
-    music_player_->Init("{\"audioResamplerFast\":true,\"reportOnQuit\":false,\"playTaskStackSize\":4500}");
+    music_player_->Init("{\"reportOnQuit\":false,\"playTaskStackSize\":4500}");
     music_player_->SetAudioSink(codec->output_sample_rate(), codec->output_channels());
 }
 
@@ -101,38 +95,59 @@ void Esp32Music::Quit() {
     ExitMusicPlaybackMode();
 }
 
-void Esp32Music::ToggleQuit() {
-    music_player_->ToggleQuit();
-}
-
 bool Esp32Music::Next() {
-    if(music_player_->IsAvailable() && !music_player_->IsPlaying()) {
-        int result = -1;
-        if((result = music_player_->Next()) == EMP_RET_OK) {
-            EnterMusicPlaybackMode();//进入播放模式
-        } else {
-            ESP_LOGI(TAG, "Next:%d, %s", music_player_->GetError(), music_player_->GetMessage());
-            ExitMusicPlaybackMode();
+    if(music_player_->IsAvailable()) {
+        if(music_player_->IsPlaying()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
-        return result == EMP_RET_OK;
+        if(!music_player_->IsPlaying()) {
+            int result = -1;
+            if((result = music_player_->Next()) == EMP_RET_OK) {
+                EnterMusicPlaybackMode();//进入播放模式
+            } else {
+                ESP_LOGI(TAG, "Next:%d, %s", music_player_->GetError(), music_player_->GetMessage());
+                ExitMusicPlaybackMode();
+            }
+            return result == EMP_RET_OK;
+        }
     }
     ESP_LOGI(TAG, "Next: not can play");
     return false;
 }
 
 bool Esp32Music::Previous() {
-    if(music_player_->IsAvailable() && !music_player_->IsPlaying()) {
-        int result = -1;
-        if((result = music_player_->Previous()) == EMP_RET_OK) {
-            EnterMusicPlaybackMode();//进入播放模式
-        } else {
-            ESP_LOGI(TAG, "Previous:%d, %s", music_player_->GetError(), music_player_->GetMessage());
-            ExitMusicPlaybackMode();
+    if(music_player_->IsAvailable()) {
+        if(music_player_->IsPlaying()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
-        return result == EMP_RET_OK;
+        if(!music_player_->IsPlaying()) {
+            int result = -1;
+            if((result = music_player_->Previous()) == EMP_RET_OK) {
+                EnterMusicPlaybackMode();//进入播放模式
+            } else {
+                ESP_LOGI(TAG, "Previous:%d, %s", music_player_->GetError(), music_player_->GetMessage());
+                ExitMusicPlaybackMode();
+            }
+            return result == EMP_RET_OK;
+        }
     }
     ESP_LOGI(TAG, "Previous: not can play");
     return false;
+}
+
+bool Esp32Music::Pause() {
+    return (music_player_->Pause() == EMP_RET_OK);
+}
+
+bool Esp32Music::Resume() {
+    int result = -1;
+    if((result = music_player_->Resume()) == EMP_RET_OK) {
+        EnterMusicPlaybackMode();//进入播放模式
+    } else {
+        ESP_LOGI(TAG, "Resume:%d, %s", music_player_->GetError(), music_player_->GetMessage());
+        ExitMusicPlaybackMode();
+    }
+    return result == EMP_RET_OK;
 }
 
 bool Esp32Music::IsPlaying() const {
@@ -144,26 +159,24 @@ std::string Esp32Music::GetSongList() const {
 }
 
 void Esp32Music::EnterMusicPlaybackMode() {
-    if (is_playing_mode) {
-        return;
+    if (!is_playing_mode) {
+        is_playing_mode = true;
+        ESP_LOGI(TAG, "EnterMusicPlaybackMode");
+        auto& app = Application::GetInstance();
+        app.AbortSpeaking(kAbortReasonNone);//停止说话
+        app.StopListening();//停止监听
+        app.CloseAudioChannelIfOpened();//关闭和云端的对话通道
+        Board::GetInstance().GetAudioCodec()->SetExclusive(true);//抢占音频输出
+        app.GetAudioService().EnableVoiceProcessing(false);//关闭语音处理管线(上行语音)
     }
-    is_playing_mode = true;
-    auto& app = Application::GetInstance();
-    auto& audio_service = app.GetAudioService();
-    app.AbortSpeaking(kAbortReasonNone);//停止说话
-    app.StopListening();//停止监听
-    app.CloseAudioChannelIfOpened();//关闭和云端的对话通道
-    audio_service.ToggleMusicPlaying(true);//开启音乐播放
-    audio_service.EnableVoiceProcessing(false);//关闭语音处理管线(上行语音)
 }
 
 void Esp32Music::ExitMusicPlaybackMode() {
-    if (!is_playing_mode) {
-        return;
+    if (is_playing_mode) {
+        is_playing_mode = false;
+        ESP_LOGI(TAG, "ExitMusicPlaybackMode");
+        auto& app = Application::GetInstance();
+        Board::GetInstance().GetAudioCodec()->SetExclusive(false);//释放音频输出
+        app.GetAudioService().EnableVoiceProcessing(true);//开启语音处理管线(上行语音)
     }
-    is_playing_mode = false;
-    auto& app = Application::GetInstance();
-    auto& audio_service = app.GetAudioService();
-    audio_service.ToggleMusicPlaying(false);//关闭音乐播放
-    audio_service.EnableVoiceProcessing(true);//开启语音处理管线(上行语音)
 }

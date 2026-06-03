@@ -680,8 +680,7 @@ void Application::DismissAlert() {
 
 void Application::ToggleChatState() {
     ESP_LOGI(TAG, "Toggle chat state");
-    audio_service_.ToggleMusicPlaying(false);
-    Board::GetInstance().GetMusic()->ToggleQuit();
+    Board::GetInstance().GetMusic()->Pause();
     xEventGroupSetBits(event_group_, MAIN_EVENT_TOGGLE_CHAT);
 }
 

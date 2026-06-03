@@ -306,7 +306,7 @@ void AudioService::AudioOutputTask() {
             codec_->EnableOutput(true);
         }
 
-        if (music_playing_) {
+        if (codec_->IsExclusive()) {
             esp_timer_stop(audio_power_timer_);
         } else {
             codec_->OutputData(task->pcm);
@@ -684,6 +684,10 @@ void AudioService::ResetDecoder() {
 }
 
 void AudioService::CheckAndUpdateAudioPowerState() {
+    if (codec_->IsExclusive()) {
+        esp_timer_stop(audio_power_timer_);
+        return;
+    }
     auto now = std::chrono::steady_clock::now();
     auto input_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_input_time_).count();
     auto output_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_output_time_).count();

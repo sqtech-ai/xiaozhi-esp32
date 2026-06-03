@@ -116,6 +116,24 @@ void McpServer::AddCommonTools() {
                     return music->Previous();
                 });
 
+        AddTool("self.music.pause",
+                "Pause current music playback.",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    return music->Pause();
+                });
+
+        AddTool("self.music.resume",
+                "Resume/Continue current music playback.",
+                PropertyList(),
+                [music](const PropertyList &properties) -> ReturnValue
+                {
+                    (void)properties;
+                    return music->Resume();
+                });
+
         AddTool("self.music.set_play_mode",
                 "Set online music queue playback mode. repeat_mode: off/one/all. shuffle: true/false.",
                 PropertyList({

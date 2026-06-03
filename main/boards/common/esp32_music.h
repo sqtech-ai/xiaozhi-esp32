@@ -11,8 +11,9 @@ public:
 
     bool Play(const char* text, const char* songName, const char* singerName, const char* tagName) override;
     void Quit() override;
-    void ToggleQuit() override;
     bool Next() override;
+    bool Pause() override;
+    bool Resume() override;
     bool Previous() override;
     bool IsPlaying() const override;
     std::string GetSongList() const override;
