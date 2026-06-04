@@ -11,18 +11,6 @@
 
 /*------------------------- 错误码定义 -------------------------*/
 /**
- * 取消播放
- */
- #define EMP_RET_PAUSE 3
-/**
- * 取消播放
- */
-#define EMP_RET_CANCEL 2
-/**
- * 音乐流播放结束
- */
-#define EMP_RET_EOS 1
-/**
  * 成功
  */
 #define EMP_RET_OK 0
@@ -31,21 +19,33 @@
  */
 #define EMP_RET_ERR -1
 /**
+ * 音乐流播放结束
+ */
+#define EMP_RET_EOS -2
+/**
+ * 取消播放
+ */
+#define EMP_RET_CANCEL -3
+/**
+ * 暂停播放
+ */
+#define EMP_RET_PAUSE -4 
+/**
  * 内存错误
  */
-#define EMP_RET_MEM_ERR -2
+#define EMP_RET_MEM_ERR -5
 /**
  * 网络连接错误
  */
-#define EMP_RET_NETWORK_ERR -3
+#define EMP_RET_NETWORK_ERR -6
 /**
  * HTTP请求错误
  */
-#define EMP_RET_HTTP_ERR -3
+#define EMP_RET_HTTP_ERR -7
 /**
  * 音频解码错误
  */
-#define EMP_RET_DECODE_ERR -4
+#define EMP_RET_DECODE_ERR -8
 
 class Http;
 class IMusicPlayer {
@@ -66,7 +66,7 @@ public:
      * @param songName 歌曲名称(可选)
      * @param singerName 歌手名称(可选)
      * @param tagName 标签名称(可选)
-     * @return 错误码
+     * @return (<0)错误码；(>=0)搜索到的歌曲总数
      */
     virtual int Search(const char* text, const char* songName, const char* singerName, const char* tagName) = 0;
     /**

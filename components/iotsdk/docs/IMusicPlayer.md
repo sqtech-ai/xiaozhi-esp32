@@ -10,19 +10,21 @@
 
 | 宏 | 值 | 含义 |
 |----|-----|------|
-| `EMP_RET_PAUSE` | `3` | 暂停播放（调用 `Pause()` 中断当前曲目，保留列表与进度，可 `Resume()` 续播） |
-| `EMP_RET_CANCEL` | `2` | 取消播放（如调用 `Quit()` / `ToggleQuit()` 中断） |
-| `EMP_RET_EOS` | `1` | 音乐流播放结束（正常播完） |
 | `EMP_RET_OK` | `0` | 成功 |
 | `EMP_RET_ERR` | `-1` | 通用错误 |
-| `EMP_RET_MEM_ERR` | `-2` | 内存错误 |
-| `EMP_RET_NETWORK_ERR` | `-3` | 网络连接错误 |
-| `EMP_RET_HTTP_ERR` | `-3` | HTTP 请求错误 |
-| `EMP_RET_DECODE_ERR` | `-4` | 音频解码错误 |
+| `EMP_RET_EOS` | `-2` | 音乐流播放结束（正常播完） |
+| `EMP_RET_CANCEL` | `-3` | 取消播放（如调用 `Quit()` / `ToggleQuit()` 中断） |
+| `EMP_RET_PAUSE` | `-4` | 暂停播放（调用 `Pause()` 中断当前曲目，保留列表与进度，可 `Resume()` 续播） |
+| `EMP_RET_MEM_ERR` | `-5` | 内存错误 |
+| `EMP_RET_NETWORK_ERR` | `-6` | 网络连接错误 |
+| `EMP_RET_HTTP_ERR` | `-7` | HTTP 请求错误 |
+| `EMP_RET_DECODE_ERR` | `-8` | 音频解码错误 |
 
-接口注释中“`@return` 错误码”与上表一致；`Play` / `Search` / `Next` / `Previous` / `Pause` / `Resume` 等方法失败时，可通过 `GetError()` / `GetMessage()` 获取最近一次错误详情。`OnFinished` 回调中的 `code` 亦可能为 `EMP_RET_PAUSE`（用户暂停）或 `EMP_RET_CANCEL`（主动退出）。
+`Play` / `Next` / `Previous` / `Pause` / `Resume` 等方法：`@return` 为错误码，`EMP_RET_OK` 表示成功；失败时可通过 `GetError()` / `GetMessage()` 获取详情。
 
-> **说明：** `EMP_RET_NETWORK_ERR` 与 `EMP_RET_HTTP_ERR` 在头文件中均为 `-3`，判断时请结合 `GetMessage()` 或调用上下文区分。
+`Search` 返回值语义不同：**`<0` 为错误码，`>=0` 为搜索到的歌曲总数**。
+
+`OnFinished` 回调中的 `code` 亦可能为 `EMP_RET_EOS`（播完）、`EMP_RET_PAUSE`（用户暂停）或 `EMP_RET_CANCEL`（主动退出）等。
 
 ---
 
@@ -103,7 +105,7 @@ virtual int Search(const char* text, const char* songName, const char* singerNam
 - 组装咪咕 `SearchSongEx` 请求（`provider=migu`，`type=1`，`searchType=4`，`pageIndex=1`，`pageSize=10`, `text=xxx` 等），按非空参数填充 `searchRange`（`songName` / `singerName` / `tagName` 各为字符串数组）。
 - 成功后将响应中的 `data.searchSong` 数组缓存为内部播放列表，当前索引置为 `0`。
 
-**返回值：** 错误码；`EMP_RET_OK` 表示搜索成功且列表非空。
+**返回值：** `<0` 为错误码；`>=0` 为搜索到的歌曲总数（`EspMusicPlayer` 成功时返回列表长度，通常 `> 0`）。
 
 ---
 
@@ -620,7 +622,7 @@ CONFIG_MBEDTLS_DES_C=y
 7. **听歌上报**：`EspMusicPlayer` 仅在 `Init` 配置 `reportOnQuit: true` 且曲目以 `EMP_RET_OK` / `EMP_RET_EOS` 结束时调用 `Report`；若需自定义起止时间或批量上报，请自行调用 `IOTSdk::Report` 或换实现类。
 8. **暂停/续播**：`Pause()` 保留列表与进度，`OnFinished` 可能返回 `EMP_RET_PAUSE`；`Resume()` 从当前索引续播。与 `Quit()`（清空列表）和 `ToggleQuit()`（取消但不标记暂停）语义不同。
 9. **曲目信息**：`GetSongName()` / `GetSingerName()` 可在播放过程中读取当前曲目元数据。
-10. **错误处理**：接口返回非 `EMP_RET_OK` 时，配合 `GetError()` / `GetMessage()` 打日志或提示用户。
+10. **错误处理**：`Search` 返回 `<0` 表示失败；`Play` / `Next` / `Previous` / `Pause` / `Resume` 返回非 `EMP_RET_OK` 表示失败。失败时配合 `GetError()` / `GetMessage()` 打日志或提示用户。
 11. **线程安全**：`OnStarted` / `OnPcmReady` / `OnCoverImageReady` / `OnProgress` / `OnFinished` 在播放任务线程执行，向 UI 或主循环投递时请使用队列/Schedule 等方式切换线程。
 12. **封面内存**：`OnCoverImageReady` 收到的 `data` 在回调返回后会被释放，显示层须自行拷贝（如 `SetMusicCoverImage` 内分配缓冲）。
 13. **音源协调**：与 TTS/对话共用 `AudioService` 时，开播前调用等效的 `EnterMusicPlaybackMode()`，结束或 `Quit` 时调用 `ExitMusicPlaybackMode()`（见 [8.3](#83-音源协调entermusicplaybackmode--exitmusicplaybackmode)）。
@@ -705,10 +707,11 @@ player->SetOnProgress([](int current_ms, int total_ms,
 
 // 3. 搜索并播放（text 为搜索原文，可与 songName/singerName/tagName 同时传入）
 int rc = player->Search("陈奕迅 十年", "十年", "陈奕迅", nullptr);
-if (rc != EMP_RET_OK) {
+if (rc < 0) {
     ESP_LOGE("demo", "Search failed: %s", player->GetMessage());
     return;
 }
+ESP_LOGI("demo", "found %d songs", rc);
 
 // 可选：查看队列
 std::string queue_json = player->GetSongList();
@@ -807,7 +810,7 @@ Esp32Music2::Esp32Music2() : music_player_(IMusicPlayer::GetInstance()) {
 
 ```cpp
 bool Esp32Music::Play(const char* text, const char* songName, const char* singerName, const char* tagName) {
-    if (music_player_->Search(text, songName, singerName, tagName) != EMP_RET_OK) {
+    if (music_player_->Search(text, songName, singerName, tagName) < 0) {
         return false;
     }
     if (music_player_->Play() == EMP_RET_OK) {
