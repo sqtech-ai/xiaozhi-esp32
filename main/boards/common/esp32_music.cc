@@ -24,13 +24,12 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
             }
         }
     });
-    music_player_->SetOnStarted([display](const char* songName, const char* singerName) {
-        ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
-        std::string title = songName;
-        if(singerName && *singerName) {
-            title += " - " + std::string(singerName);
+    music_player_->SetAudioSink(codec->output_sample_rate(), codec->output_channels());
+    music_player_->SetOnPcmReady([codec](char* pcm, int length) {
+        if (pcm == nullptr || length <= 0 || (length % (int)sizeof(int16_t)) != 0) {
+            return;
         }
-        display->SetMusicTitle(title.c_str());
+        codec->OutputData((const int16_t*)pcm, length >> 1);
     });
     music_player_->SetOnFinished([this, display](int code, const char* message) {
         ESP_LOGI(TAG, "OnPlaybackFinished:%d, %s", code, message);
@@ -45,17 +44,26 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
             }
         });
     });
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    music_player_->SetOnStarted([display](const char* songName, const char* singerName) {
+        ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
+        display->SetChatMessage("system", songName);
+    });
+    music_player_->Init("{\"reportOnQuit\":false,\"httpRcvBufLength\":1024,\"playTaskStackSize\":2300}");
+#else
+    music_player_->SetOnStarted([display](const char* songName, const char* singerName) {
+        ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
+        std::string title = songName;
+        if(singerName && *singerName) {
+            title += " - " + std::string(singerName);
+        }
+        display->SetMusicTitle(title.c_str());
+    });
     music_player_->SetOnProgress([display](int current_ms, int total_ms, const char* lyric_previous, const char* lyric_current, const char* lyric_next) {
         if (current_ms < 0 || total_ms <= 0) {
             return;
         }
         display->SetMusicProgress(current_ms, total_ms, lyric_current);
-    });
-    music_player_->SetOnPcmReady([codec](char* pcm, int length) {
-        if (pcm == nullptr || length <= 0 || (length % (int)sizeof(int16_t)) != 0) {
-            return;
-        }
-        codec->OutputData((const int16_t*)pcm, length >> 1);
     });
     music_player_->SetOnCoverImageReady([display](char* data, int datalen) {
         if (data == nullptr || datalen <= 0) {
@@ -67,7 +75,7 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
         }
     });
     music_player_->Init("{\"reportOnQuit\":false,\"playTaskStackSize\":4500}");
-    music_player_->SetAudioSink(codec->output_sample_rate(), codec->output_channels());
+#endif
 }
 
 Esp32Music::~Esp32Music() {
@@ -76,7 +84,7 @@ Esp32Music::~Esp32Music() {
 
 bool Esp32Music::Play(const char* text, const char* songName, const char* singerName, const char* tagName) {
     int result = music_player_->Search(text, songName, singerName, tagName);
-    if(result != EMP_RET_OK) {
+    if(result < 0) {
         ESP_LOGI(TAG, "Search failed: %d, %s", result, music_player_->GetMessage());
         return false;
     }

@@ -322,9 +322,11 @@ void Application::HandleActivationDoneEvent() {
     });
     Schedule([this]() {
         // Initialize the IoT SDK
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
         IOTSdk::Singleton().SetOnGetBoardHttp([](int action) -> std::unique_ptr<BoardHttp> {
             return std::make_unique<BoardHttpImpl>();
         });
+#endif
         cJSON* root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "deviceId", "");
         cJSON_AddStringToObject(root, "appLicenseId", "");
