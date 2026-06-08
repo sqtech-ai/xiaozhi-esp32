@@ -3,5 +3,5 @@ idf_component_register(
     PRIV_REQUIRES mbedtls esp_http_client
 )
 
-add_prebuilt_library(iotsdk_prebuilt "esp32s3-idf-v5.5.2/migumusic.a")
+add_prebuilt_library(iotsdk_prebuilt "esp32c3-idf-v5.5.2/migumusic.a")
 target_link_libraries(${COMPONENT_LIB} INTERFACE iotsdk_prebuilt)

@@ -49,7 +49,7 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
         ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
         display->SetChatMessage("system", songName);
     });
-    music_player_->Init("{\"reportOnQuit\":false,\"httpRcvBufLength\":1024,\"playTaskStackSize\":2300}");
+    music_player_->Init("{\"reportOnQuit\":false,\"useHelixMp3Dec\":true,\"playTaskStackSize\":2300}");
 #else
     music_player_->SetOnStarted([display](const char* songName, const char* singerName) {
         ESP_LOGI(TAG, "OnPlaybackStarted: %s, %s", songName, singerName);
@@ -74,7 +74,7 @@ Esp32Music::Esp32Music(): music_player_(IMusicPlayer::GetInstance()) {
             display->SetPreviewImage(std::move(image));
         }
     });
-    music_player_->Init("{\"reportOnQuit\":false,\"playTaskStackSize\":4500}");
+    music_player_->Init("{\"reportOnQuit\":false,\"useHelixMp3Dec\":false,\"playTaskStackSize\":3000}");
 #endif
 }
 

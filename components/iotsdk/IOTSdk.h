@@ -37,6 +37,10 @@
  * 请求超时
  */
 #define IOTSDK_RET_TIMEOUT -6
+/**
+ * 设备ID为空
+ */
+#define IOTSDK_RET_INVALID_DEVICE_ID -7
 
 /*------------------------- 内容提供商定义 -------------------------*/
 /**

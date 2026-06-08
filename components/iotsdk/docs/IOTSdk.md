@@ -15,6 +15,7 @@
 | `IOTSDK_RET_REQUEST_EXCEPTION` | `-4` | 请求异常 |
 | `IOTSDK_RET_INVALID_REQUEST` | `-5` | 请求不支持或无效 |
 | `IOTSDK_RET_TIMEOUT` | `-6` | 请求超时 |
+| `IOTSDK_RET_INVALID_DEVICE_ID` | `-7` | 设备 ID 为空 |
 
 接口注释中“`@return 0 成功，其他失败`”与上述错误码约定一致；具体失败时返回哪一个负值，以实现为准。
 

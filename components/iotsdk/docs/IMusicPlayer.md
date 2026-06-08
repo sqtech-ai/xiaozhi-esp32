@@ -50,35 +50,28 @@ virtual void Init(const char* config_json) = 0;
 |------|------|------|
 | `config_json` | `const char*` | 播放器配置，**JSON 字符串**；可为 `nullptr` 或 `"{}"`，表示使用实现类默认值 |
 
-**行为（`EspMusicPlayer`）：**
+**行为：** 解析 JSON 可选字段；须在 `IOTSdk::Init` 与 `SetOnGetBoardHttp` 完成之后、`Search` / `Play` 之前调用。
 
-- 解析 `config_json` 中的可选字段，覆盖内部运行参数（未出现的字段保持 [`EspMusicPlayer.h`](../EspMusicPlayer.h) 中的默认值）。
-- 打日志输出 SDK 版本与传入的配置原文。
-- **不**初始化 `IOTSdk`，**不**创建播放任务；须在 `IOTSdk::Init` 与 `SetOnGetBoardHttp` 完成之后、`Search` / `Play` 之前调用。
-
-**`EspMusicPlayer` 支持的 JSON 字段：**
+**JSON 字段（`EspMusicPlayer`）：**
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `audioResamplerFast` | bool | `true` | 是否使用快速重采样（传给 `EspAudioDec`） |
-| `reportOnQuit` | bool | `false` | 为 `true` 时，曲目正常结束或 `Quit` 打断且 `err_code_` 为 `EMP_RET_OK` / `EMP_RET_EOS` 时调用 `IOTSdk::Report` 上报听歌记录 |
+| `audioResamplerFast` | bool | `true` | 是否使用快速重采样 |
+| `useHelixMp3Dec` | bool | `false` | `true`：Helix MP3 解码（省内存，适合 C3）；`false`：`esp_audio_codec`（默认） |
+| `reportOnQuit` | bool | `false` | 播完或正常退出时是否调用 `IOTSdk::Report` 上报 |
 | `httpReadTimeoutMs` | number | `5000` | HTTP 拉流读超时（毫秒） |
-| `httpRcvBufLength` | number | `2048` | HTTP 接收缓冲区大小（字节，`2 << 10`） |
-| `decodeBufferSize` | number | `4700` | MP3 解码 PCM 缓冲区大小（字节） |
-| `playTaskPriority` | number | `6` | FreeRTOS 播放任务优先级 |
-| `playTaskStackSize` | number | `3500` | FreeRTOS 播放任务栈大小（字） |
+| `playTaskPriority` | number | `6` | 播放任务优先级 |
+| `playTaskStackSize` | number | `3500` | 播放任务栈大小（字）；含封面/歌词时可增至约 `4500`，C3 可酌减 |
 
-**配置示例：**
+**示例：**
 
 ```json
 {
   "audioResamplerFast": true,
-  "reportOnQuit": true,
-  "httpReadTimeoutMs": 8000,
-  "httpRcvBufLength": 4096,
-  "decodeBufferSize": 4700,
-  "playTaskPriority": 6,
-  "playTaskStackSize": 3500
+  "useHelixMp3Dec": true,
+  "reportOnQuit": false,
+  "httpReadTimeoutMs": 5000,
+  "playTaskStackSize": 2300
 }
 ```
 
@@ -99,11 +92,7 @@ virtual int Search(const char* text, const char* songName, const char* singerNam
 | `singerName` | `const char*` | 歌手名称（可选）；可为 `nullptr` 或空字符串 |
 | `tagName` | `const char*` | 标签名称（可选，如流派/分类）；可为 `nullptr` 或空字符串 |
 
-**行为（`EspMusicPlayer`）：**
-
-- 清空上一次搜索结果与播放列表。
-- 组装咪咕 `SearchSongEx` 请求（`provider=migu`，`type=1`，`searchType=4`，`pageIndex=1`，`pageSize=10`, `text=xxx` 等），按非空参数填充 `searchRange`（`songName` / `singerName` / `tagName` 各为字符串数组）。
-- 成功后将响应中的 `data.searchSong` 数组缓存为内部播放列表，当前索引置为 `0`。
+**行为：** 清空旧列表，调用咪咕 `SearchSongEx`，成功则缓存 `data.searchSong` 为播放列表。
 
 **返回值：** `<0` 为错误码；`>=0` 为搜索到的歌曲总数（`EspMusicPlayer` 成功时返回列表长度，通常 `> 0`）。
 
@@ -127,12 +116,11 @@ virtual int Play(int index = 0) = 0;
 
 **行为：**
 
-- 根据 `index` 选取列表项，解析 `listenUrl`（必要时通过 `GetMusicInfo` 补全 URL）。
-- 在独立任务 `PlayTask` 中执行：先调用 `SetOnStarted(songName, singerName)`（若已注册）；再在 `PlayImpl` 中拉流、解码，PCM 经 `SetOnPcmReady` 输出。
-- 若注册了 **`SetOnCoverImageReady`**：`PlayImpl` 开头会先下载 `picUrl` 并回调封面，再下载 `lrcUrl` 并解析 LRC 歌词（供进度回调使用）；二者均依赖 `IOTSdk::SetOnGetBoardHttp`（`IOTSDK_MIGU_HTTPS`）。
-- 若注册了 **`SetOnProgress`** 且曲目 `length`（`HH:mm:ss`）可解析为 `total_ms > 0`，播放循环中约 **每秒** 回调一次，参数含当前进度与上/当前/下一句歌词。
-- 任务结束时调用 `SetOnFinished(code, message)`。
-- **`EspMusicPlayer`：** 若 `Init` 时设置 `"reportOnQuit": true`，且曲目以 `EMP_RET_OK` / `EMP_RET_EOS` 结束，则在 `OnFinished` 之前调用 `IOTSdk::Report()` 上报听歌记录（见 [IOTSdk.md](./IOTSdk.md) 第 4.7 节）。
+- 根据 `index` 选取列表项，解析 `listenUrl`（必要时通过 `GetMusicInfo` 补全）。
+- 异步播放：回调 `SetOnStarted` → 拉流解码 → `SetOnPcmReady` 输出 PCM → `SetOnFinished`。
+- 若注册 **`SetOnCoverImageReady`**：开播前下载封面与 LRC 歌词（需 `SetOnGetBoardHttp`）。
+- 若注册 **`SetOnProgress`** 且曲目有时长：约每秒回调进度与歌词。
+- `Init` 中 `"reportOnQuit": true` 且正常结束时调用 `IOTSdk::Report`（见 [IOTSdk.md](./IOTSdk.md)）。
 
 **返回值：** 错误码；`EMP_RET_OK` 表示播放任务已成功创建（异步播放，结束见 `OnFinished`）。
 
@@ -484,12 +472,7 @@ void SetOnProgress(std::function<void(int current_ms, int total_ms, const char* 
 | `lyric_current` | `const char*` | 当前句歌词 |
 | `lyric_next` | `const char*` | 下一句歌词 |
 
-**行为（`EspMusicPlayer`）：**
-
-- 在 `PlayImpl` 主循环中，当 `total_ms > 0` 时约 **每 1 秒** 触发一次。
-- `total_ms` 来自当前曲目 JSON 字段 `length` 字符串，格式为 **`HH:mm:ss`**（如 `"04:12:30"`），解析失败则为 `0`，此时不回调。
-- `current_ms` 为 `GetTimestampMs() - 开播时刻`，与墙钟对齐，非解码帧精确 PTS。
-- 歌词字段依赖 `SetOnCoverImageReady` 注册后下载并解析 `lrcUrl`；未注册封面回调或无有效 LRC 时，歌词参数均为 `nullptr`。
+**行为：** 当 `total_ms > 0` 时约每秒回调一次。`total_ms` 来自曲目 `length`（`HH:mm:ss`）。歌词需已注册 `SetOnCoverImageReady` 且存在有效 `lrcUrl`。
 
 **UI 集成示例：** 将 `current_ms` / `total_ms` 传入 `Display::SetMusicProgress(current_ms, total_ms)`；将 `lyric_*` 传入 `Display::SetMusicLyric(...)`。
 
@@ -557,57 +540,46 @@ Quit()                                    // 停止并清空列表
 
 ### 6.1 依赖组件
 
-`EspMusicPlayer`、`EspAudioDec`、`EspOpusDec` 等源文件在链接时需要以下组件（与 [`projects/esp32s3-idf-v5.5.2/components/iotsdk/CMakeLists.txt`](../../projects/esp32s3-idf-v5.5.2/components/iotsdk/CMakeLists.txt) 中 `REQUIRES` 一致）：
-
 | 组件名 | 说明 |
 |--------|------|
-| `json` | ESP-IDF 自带 `json` 组件（cJSON） |
-| `mbedtls` | ESP-IDF 自带 TLS/加解密 |
-| `esp_http_client` | ESP-IDF 自带 HTTP 客户端 |
-| `esp_audio_codec` | Component Manager：`espressif/esp_audio_codec`（MP3/Opus 等解码） |
-| `esp_audio_effects` | Component Manager：`espressif/esp_audio_effects` |
+| `json` | cJSON |
+| `mbedtls` | TLS/加解密 |
+| `esp_http_client` | HTTP 客户端 |
+| `esp_audio_codec` | `espressif/esp_audio_codec` |
+| `esp_audio_effects` | `espressif/esp_audio_effects`（重采样） |
+| `esp-libhelix-mp3` | `chmorgan/esp-libhelix-mp3`（须链接；`useHelixMp3Dec` 为 `true` 时使用） |
 
-**`iotsdk` 组件 `CMakeLists.txt` 示例：**
+**`iotsdk` `CMakeLists.txt`：**
 
 ```cmake
-idf_component_register(
-    SRCS ...
-    INCLUDE_DIRS ...
-    REQUIRES json mbedtls esp_http_client esp_audio_codec esp_audio_effects
-)
+REQUIRES json mbedtls esp_http_client esp_audio_codec esp_audio_effects esp-libhelix-mp3
 ```
 
-**`main/idf_component.yml` 中需声明托管组件（若 `main` 直接依赖 iotsdk）：**
+**`components/iotsdk/idf_component.yml`：**
 
 ```yaml
 dependencies:
   espressif/esp_audio_codec: "*"
   espressif/esp_audio_effects: "*"
+  chmorgan/esp-libhelix-mp3:
+    version: "*"
 ```
 
-集成方 `main` 的 `CMakeLists.txt` 中 `PRIV_REQUIRES` / `REQUIRES` 须能传递上述依赖（链接预编译 **`migumusic.a`** 时尤须显式加入 `esp_audio_codec`、`esp_audio_effects`）。
+链接预编译 **`migumusic.a`** 时，`main` 侧亦须能传递上述依赖。
 
 ### 6.2 mbedTLS：`CONFIG_MBEDTLS_DES_C=y`
 
-IOTSdk 业务加解密路径使用 **DES**，须在工程中开启该选项，否则可能链接失败或 HTTPS/协议层异常。
+须在工程中开启（IOTSdk 使用 DES 加解密）：
 
 | 配置项 | 要求值 |
 |--------|--------|
-| `CONFIG_MBEDTLS_DES_C` | `y`（必选） |
+| `CONFIG_MBEDTLS_DES_C` | `y` |
 
-**方式一：`idf.py menuconfig`**
-
-路径：`Component config` → `mbedTLS` → 勾选 **DES module**（界面文案可能为 “Enable DES module”）。
-
-**方式二：`sdkconfig.defaults`**
-
-在工程根目录 `sdkconfig.defaults` 增加一行（参考 `projects/esp32s3-idf-v5.5.2/sdkconfig.defaults`）：
+`menuconfig`：`Component config` → `mbedTLS` → **DES module**；或在 `sdkconfig.defaults` 增加：
 
 ```ini
 CONFIG_MBEDTLS_DES_C=y
 ```
-
-修改后执行 `idf.py fullclean` 再 `idf.py build`，或在 menuconfig 中保存一次以写入 `sdkconfig`。
 
 ---
 
@@ -627,7 +599,7 @@ CONFIG_MBEDTLS_DES_C=y
 12. **封面内存**：`OnCoverImageReady` 收到的 `data` 在回调返回后会被释放，显示层须自行拷贝（如 `SetMusicCoverImage` 内分配缓冲）。
 13. **音源协调**：与 TTS/对话共用 `AudioService` 时，开播前调用等效的 `EnterMusicPlaybackMode()`，结束或 `Quit` 时调用 `ExitMusicPlaybackMode()`（见 [8.3](#83-音源协调entermusicplaybackmode--exitmusicplaybackmode)）。
 14. **设备状态监听**：通过 `AddStateChangeListener` 在连接云端或 TTS 播报时 `ToggleQuit()` 打断音乐（见 [8.4](#84-设备状态监听addstatechangelistener)）。
-15. **编译依赖**：满足 [第 6 节](#6-esp-idf-编译事项) 中的组件依赖与 `CONFIG_MBEDTLS_DES_C=y`。
+15. **编译依赖**：见 [第 6 节](#6-esp-idf-编译事项)。
 
 ---
 
@@ -672,10 +644,7 @@ IOTSdk::Singleton().Init("./", init_args_json);
 // 2. 获取播放器并初始化配置
 IMusicPlayer* player = IMusicPlayer::GetInstance();
 
-const char* player_config = R"({
-  "reportOnQuit": true,
-  "httpReadTimeoutMs": 8000
-})";
+const char* player_config = R"({"reportOnQuit": true, "httpReadTimeoutMs": 8000})";
 player->Init(player_config);
 
 player->SetAudioSink(16000, 1);  // 与 AudioCodec 输出一致
@@ -1060,7 +1029,7 @@ text → songName → singerName → tagName
 ### 8.7 集成检查清单
 
 1. `IOTSdk::SetOnGetBoardHttp` → `IOTSdk::Init` → `IMusicPlayer::Init`（可为 `nullptr` / `"{}"`）→ 回调 → `Search` / `Play`。
-2. [第 6 节](#6-esp-idf-编译事项)：`REQUIRES` 含 `json`、`mbedtls`、`esp_http_client`、`esp_audio_codec`、`esp_audio_effects`，且 `CONFIG_MBEDTLS_DES_C=y`。
+2. [第 6 节](#6-esp-idf-编译事项) 组件依赖与 `CONFIG_MBEDTLS_DES_C=y`。
 3. `SetAudioSink` 采样率、声道与 `AudioCodec` 一致（如 16000 Hz、单声道）。
 4. 必须设置 `SetOnFinished`、`SetOnPcmReady`；按需 `SetOnStarted`、`SetOnCoverImageReady`（封面+歌词）、`SetOnProgress`。
 5. `Search(text, ...)` / `Music::Play` / MCP `play_online`：`text` 为用户搜索原文（头文件与 MCP 均为必填）。
