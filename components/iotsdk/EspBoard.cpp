@@ -5,7 +5,7 @@
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include "board.h"
-#include "EspBoard.h"
+#include "IOTBoard.h"
 
 #define TAG "EspBoard"
 

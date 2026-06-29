@@ -34,7 +34,7 @@
 
 ## 3. HTTP 连接意图（action）
 
-通过 `SetOnGetBoardHttp` 注册板载 HTTP 工厂时（**4G 板卡必选，WiFi 板卡通常省略**），SDK 会按 **action** 区分连接用途；回调须返回 [`BoardHttp`](../EspBoard.h) 实现实例。
+通过 `SetOnGetBoardHttp` 注册板载 HTTP 工厂时（**4G 板卡必选，WiFi 板卡通常省略**），SDK 会按 **action** 区分连接用途；回调须返回 [`BoardHttp`](../IOTBoard.h) 实现实例。
 
 | 宏 | 值 | 说明 |
 |----|-----|------|
@@ -54,7 +54,7 @@
 IOTSdk& IOTSdk::Singleton();
 ```
 
-以下方法均在 `IOTSdk` 上调用（具体实现由工程提供）。板载 HTTP 相关类型为 [`BoardHttp`](../EspBoard.h)（由 `IOTSdk.h` 通过 `#include "EspBoard.h"` 引入）。
+以下方法均在 `IOTSdk` 上调用（具体实现由工程提供）。板载 HTTP 相关类型为 [`BoardHttp`](../IOTBoard.h)（由 `IOTSdk.h` 通过 `#include "IOTBoard.h"` 引入）。
 
 ### 4.1 `Init`
 
