@@ -82,7 +82,7 @@ virtual void Init(const char* config_json) = 0;
 ### 2.2 `Search`
 
 ```cpp
-virtual int Search(const char* text, const char* songName, const char* singerName, const char* tagName) = 0;
+virtual int Search(const char* text, const char* songName, const char* singerName, const char* tagName, const char* extArgs = NULL) = 0;
 ```
 
 | 参数 | 类型 | 说明 |
@@ -91,8 +91,16 @@ virtual int Search(const char* text, const char* songName, const char* singerNam
 | `songName` | `const char*` | 歌曲名称（可选）；可为 `nullptr` 或空字符串 |
 | `singerName` | `const char*` | 歌手名称（可选）；可为 `nullptr` 或空字符串 |
 | `tagName` | `const char*` | 标签名称（可选，如流派/分类）；可为 `nullptr` 或空字符串 |
+| `extArgs` | `const char*` | 扩展参数（可选）；**JSON 字符串**，可为 `nullptr` 或 `"{}"`。字段含义见 [IOTSdk.md](./IOTSdk.md) 第 4.5 节 `SearchSong` 入参 |
 
-**行为：** 清空旧列表，调用咪咕 `SearchSongEx`，成功则缓存 `data.searchSong` 为播放列表。
+**行为：** 清空旧列表，组装 `SearchSongEx` 请求体后调用咪咕接口，成功则缓存 `data.searchSong` 为播放列表。
+
+**`EspMusicPlayer` 请求体组装规则：**
+
+- 以 `extArgs` 解析出的 JSON 对象为基底（未传时等价于 `{}`）。
+- **始终写入/覆盖：** `provider`（`migu`）、`text`、`searchRange`（由 `songName` / `singerName` / `tagName` 非空项填充）。
+- **缺省补全（仅当 `extArgs` 中未提供对应字段时）：** `pageIndex=1`、`pageSize=10`、`type=1`、`searchType=4`。
+- `extArgs` 中其余 `SearchSong` 字段（如 `issemantic`、`isCorrect` 等）会保留并随请求一并提交。
 
 **返回值：** `<0` 为错误码；`>=0` 为搜索到的歌曲总数（`EspMusicPlayer` 成功时返回列表长度，通常 `> 0`）。
 
@@ -494,7 +502,7 @@ SetOnFinished / SetOnPcmReady              // 必选
 SetOnStarted / SetOnCoverImageReady / SetOnProgress  // 可选
 AddStateChangeListener（可选，对话态打断音乐，见 8.4）
     ↓
-Search(text, songName, singerName, tagName)  // 构建播放列表（text 必填）
+Search(text, songName, singerName, tagName, extArgs)  // 构建播放列表（text 必填；extArgs 可选）
     ↓
 Play(0) 或 Play(index)
     ↓
@@ -524,7 +532,7 @@ Quit()                                    // 停止并清空列表
 
 | 播放器阶段 | 依赖的 IOTSdk 接口 |
 |------------|-------------------|
-| `Search` | `SearchSongEx`（见 [IOTSdk.md](./IOTSdk.md) 第 4.6 节）；请求体含 `text` 与 `searchRange` |
+| `Search` | `SearchSongEx`（见 [IOTSdk.md](./IOTSdk.md) 第 4.6 节）；请求体含 `text`、`searchRange`，以及 `extArgs` 传入的其它 `SearchSong` 字段 |
 | `Play`（无 `listenUrl` 时） | `GetMusicInfo`（第 4.8 节） |
 | `Play` 封面 / 歌词 | `Config::on_get_board_http(IOTSDK_MIGU_HTTPS)` |
 | `Play` 拉流 | `Config::on_get_board_http(IOTSDK_MIGU_MUSIC)` |
@@ -589,7 +597,7 @@ CONFIG_MBEDTLS_DES_C=y
 2. **`SetOnFinished`、`SetOnPcmReady` 为必选**；未设置时行为未定义。
 3. **`SetOnStarted`、`SetOnCoverImageReady`、`SetOnProgress` 为可选**；封面/歌词/拉流依赖 `SetOnGetBoardHttp`；歌词与进度需 `SetOnCoverImageReady` 注册且 `lrcUrl` 有效。
 4. **`SetAudioSink` 必须在 `Play` 前调用**，否则 `IsAvailable()` 为 `false`。
-5. **`Search` 与 `Play` 分离**：`Search` 只拉列表，`Play` 才真正开播；`Quit` 会清空列表（实现相关）。`text` 为必填搜索原文，可与 `songName`/`singerName`/`tagName` 组合填入 `searchRange`。
+5. **`Search` 与 `Play` 分离**：`Search` 只拉列表，`Play` 才真正开播；`Quit` 会清空列表（实现相关）。`text` 为必填搜索原文，可与 `songName`/`singerName`/`tagName` 组合填入 `searchRange`；分页、搜索类型等可通过 `extArgs`（JSON）覆盖默认值，字段见 [IOTSdk.md](./IOTSdk.md) `SearchSong` 入参。
 6. **队列查询**：`GetSongList()` 返回 JSON 字符串。
 7. **听歌上报**：`EspMusicPlayer` 仅在 `Init` 配置 `reportOnQuit: true` 且曲目以 `EMP_RET_OK` / `EMP_RET_EOS` 结束时调用 `Report`；若需自定义起止时间或批量上报，请自行调用 `IOTSdk::Report` 或换实现类。
 8. **暂停/续播**：`Pause()` 保留列表与进度，`OnFinished` 可能返回 `EMP_RET_PAUSE`；`Resume()` 从当前索引续播。与 `Quit()`（清空列表）和 `ToggleQuit()`（取消但不标记暂停）语义不同。
@@ -675,7 +683,9 @@ player->SetOnProgress([](int current_ms, int total_ms,
 });
 
 // 3. 搜索并播放（text 为搜索原文，可与 songName/singerName/tagName 同时传入）
-int rc = player->Search("陈奕迅 十年", "十年", "陈奕迅", nullptr);
+// extArgs 可选，用于覆盖 pageSize、type 等 SearchSong 字段
+const char* search_ext = R"({"pageSize": 20})";
+int rc = player->Search("陈奕迅 十年", "十年", "陈奕迅", nullptr, search_ext);
 if (rc < 0) {
     ESP_LOGE("demo", "Search failed: %s", player->GetMessage());
     return;
@@ -1022,7 +1032,7 @@ if (music) {
 text → songName → singerName → tagName
 ```
 
-与 `IMusicPlayer::Search(text, songName, singerName, tagName)` 一致。
+与 `IMusicPlayer::Search(text, songName, singerName, tagName, extArgs)` 一致（MCP 当前未暴露 `extArgs`，需直接调用 `IMusicPlayer::Search` 时使用）。
 
 ---
 
@@ -1032,7 +1042,7 @@ text → songName → singerName → tagName
 2. [第 6 节](#6-esp-idf-编译事项) 组件依赖与 `CONFIG_MBEDTLS_DES_C=y`。
 3. `SetAudioSink` 采样率、声道与 `AudioCodec` 一致（如 16000 Hz、单声道）。
 4. 必须设置 `SetOnFinished`、`SetOnPcmReady`；按需 `SetOnStarted`、`SetOnCoverImageReady`（封面+歌词）、`SetOnProgress`。
-5. `Search(text, ...)` / `Music::Play` / MCP `play_online`：`text` 为用户搜索原文（头文件与 MCP 均为必填）。
+5. `Search(text, ...)` / `Music::Play` / MCP `play_online`：`text` 为用户搜索原文（头文件与 MCP 均为必填）；需自定义分页或 `SearchSong` 其它字段时，向 `IMusicPlayer::Search` 传入 `extArgs`（JSON）。
 6. `GetSongList()` 返回 JSON 字符串；`GetSongName()` / `GetSingerName()` 读取当前曲目元数据。
 7. `Pause()` / `Resume()` 用于暂停续播（`OnFinished` 可能返回 `EMP_RET_PAUSE`）；与 `Quit()` / `ToggleQuit()` 语义不同。
 8. 开播成功调用 **`EnterMusicPlaybackMode()`**，停止/播完/失败调用 **`ExitMusicPlaybackMode()`**（[8.3](#83-音源协调entermusicplaybackmode--exitmusicplaybackmode)）。

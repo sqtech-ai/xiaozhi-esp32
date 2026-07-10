@@ -88,6 +88,13 @@ public:
      */
     virtual int Init(const std::string& workspace, const std::string& args) = 0;
     /**
+     * 设置获取板载MQTT客户端回调(可选)
+     * 1.必须在IOTSdk::Init()之前注册
+     * 2.BoardMqtt实现可以参考EspBoard.cpp
+     * 3.如果是板载4G模组，必须调用该函数设置回调，否则无法使用网络功能
+     */
+     virtual void SetOnGetBoardMqtt(std::function<std::unique_ptr<BoardMqtt>()> on_get_board_mqtt) = 0;
+     /**
      * 设置获取板载HTTP客户端回调
      * 特别注意：
      * 1.必须在IOTSdk::Init()之前注册

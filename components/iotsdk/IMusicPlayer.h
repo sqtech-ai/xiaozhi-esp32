@@ -66,9 +66,10 @@ public:
      * @param songName 歌曲名称(可选)
      * @param singerName 歌手名称(可选)
      * @param tagName 标签名称(可选)
+     * @param extArgs 扩展参数(可选)，必须是json字符串。参数可参考IOTSdk.SearchSong()的入参
      * @return (<0)错误码；(>=0)搜索到的歌曲总数
      */
-    virtual int Search(const char* text, const char* songName, const char* singerName, const char* tagName) = 0;
+    virtual int Search(const char* text, const char* songName, const char* singerName, const char* tagName, const char* extArgs = NULL) = 0;
     /**
      * 播放歌曲
      * @param index 歌曲索引(可选，默认0)

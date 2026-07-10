@@ -71,13 +71,23 @@ virtual int Init(const std::string& workspace, const std::string& args) = 0;
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `deviceId` | 是 | 设备唯一标识 |
+| `deviceId` | 是 | 设备唯一标识（通常为 WiFi STA 的 MAC 地址，格式如 `88:56:a6:e8:88:60`） |
 | `appLicenseId` | 是 | 许可证 ID |
 | `appKey` | 是 | 区域编码 |
 | `serverToken` | 是 | 服务端 token |
 | `regionCode` | 是 | 区域编码 |
 | `servicePackageCode` | 是 | 服务套餐码 |
 | `env` | 否 | 环境：`prod`（生产）、`test`（测试） |
+
+**`deviceId` 获取指引：**
+
+1. **小智设备**：可从设备串口日志中获取 WiFi STA 模式的 MAC 地址，作为 `deviceId`。日志示例：
+
+   ```
+   I (615) wifi:mode : sta (88:56:a6:e8:88:60)
+   ```
+
+   其中括号内的 `88:56:a6:e8:88:60` 即为设备唯一标识，填写到 `args` 的 `deviceId` 字段。
 
 **返回值：** `0` 表示成功，非 `0` 表示失败（见第 1 节错误码）。
 
