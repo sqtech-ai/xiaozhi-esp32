@@ -41,6 +41,10 @@
  * 设备ID为空
  */
 #define IOTSDK_RET_INVALID_DEVICE_ID -7
+/**
+ * 不可播放
+ */
+#define IOTSDK_RET_UNPLAYABLE -8
 
 /*------------------------- 内容提供商定义 -------------------------*/
 /**
@@ -249,42 +253,59 @@ public:
      */
     virtual int SearchByKey(const std::string& input, std::string& output, int timeout = 10000) = 0;
     /**
-     * 搜歌曲（NEW，咪咕）
+     * 搜歌曲扩展（咪咕）
      * @param input 输入参数(json字符串)
-     * 入参字段与 SearchByKey() 相同：
      * provider: 内容供应商(必填, 仅支持migu)
-     * text: 搜索内容(必填)；当 type=1 且 searchType=3，或 type=7 时 text 为歌手 id
-     * type: 搜索目的(可选)；默认为1（1-歌曲 2-专辑 3-歌手 4-标签下歌曲 5-无维度 6-联想 7-歌手下单曲专辑MV 8-歌词）
-     * pageIndex: 当前页(起始页为1)，可选
-     * pageSize: 每页条数，[0-50]，可选
-     * searchType: 搜索类型：type 为 1 或 5 时使用（1-智能 2-关键词 3-歌手下歌曲 4-指定范围搜索等，见文档）
-     * issemantic: 语义判定：type 为 1/2/3/4 时有效（1-语义 0-否）
-     * isCorrect: 容错：type 为 1/2/3/4/5 时有效（0-关 1-开）
-     * searchRange: 对象，type=1 且 searchType=4 时精确指定搜索范围（意图），见接口文档
+     * 其余咪咕检索字段与 Search() 的「咪咕扩展」相同（text / type / pageIndex / pageSize /
+     *      searchType / issemantic / isCorrect / searchRange）
      * @param output 返回结果(json字符串)
      * code: 返回码（示例："1"）
      * message: 返回消息（示例："Success"）
      * traceId: 链路追踪ID
      * data: 业务数据对象
-     *      searchSong: 歌曲列表（数组）
-     *          musicId: 歌曲ID（18位产品ID）
-     *          musicName: 歌曲名称
-     *          singerName: 歌手名称
+     *      searchSong: 歌曲列表（数组）；字段含义同 Search() 返回结果中的 searchSong
      * responseSign: 响应签名（可能为 null）
      * @param timeout 超时时长，单位ms
      * @return 0 成功，其他失败
      */
-    virtual int SearchSong(const std::string& input, std::string& output, int timeout = 10000) = 0;
+    virtual int SearchSongEx(const std::string& input, std::string& output, int timeout = 10000) = 0;
     /**
-     * 搜歌曲扩展（咪咕）
-     * @param input 输入参数(json字符串)，与 SearchSong() 完全一致（字段含义见 SearchSong()）。
-     * @param output 返回结果(json字符串)，整体与 SearchSong() 基本一致：同为 code、message、data 等结构，
-     *      data.searchSong 为歌曲列表；每条记录在 SearchSong 已提供的 singerName、musicName（歌曲名称）等基础上，
-     *      额外包含 listenUrl（试听地址）；其余业务字段与 SearchSong 返回对齐。
+     * 合并内容搜索（喜马拉雅 + 咪咕）
+     * @param input 输入参数(json字符串)
+     * 通用:
+     *      text: 搜索内容(必填)
+     *      providerOrder: 内容供应商搜索顺序(可选，string 数组)；元素为 "xmly" / "migu"，
+     *          按数组先后决定服务端编排优先级。示例：["xmly","migu"] 先喜马后咪咕；
+     *          ["migu"] 仅搜咪咕。未传时由服务端默认编排（通常先喜马后咪咕）
+     * 喜马扩展(可选，进入 xmly 分区):
+     *      intent: 意图，listen_audiobook-有声书(默认)、listen_music-音乐
+     *      position: 有声书集数；未传时可用 pageIndex 映射
+     *      isRecommend: 未搜到时是否返回推荐(boolean，默认 false)
+     * 咪咕扩展(可选，进入 migu 分区):
+     *      type: 搜索目的(可选)；默认为1（1-歌曲 2-专辑 3-歌手 4-标签下歌曲 5-无维度 6-联想 7-歌手下单曲专辑MV 8-歌词）
+     *      pageIndex: 当前页(起始页为1)，可选；亦可用于映射喜马 position
+     *      pageSize: 每页条数，[0-50]，可选
+     *      searchType: 搜索类型：type 为 1 或 5 时使用（1-智能 2-关键词 3-歌手下歌曲 4-指定范围搜索等，见文档）
+     *      issemantic: 语义判定：type 为 1/2/3/4 时有效（1-语义 0-否）
+     *      isCorrect: 容错：type 为 1/2/3/4/5 时有效（0-关 1-开）
+     *      searchRange: 对象，type=1 且 searchType=4 时精确指定搜索范围（意图），见接口文档
+     * @param output 返回结果(json字符串)
+     * code / message: 平台统一业务码与消息
+     * data: 命中侧结果
+     *      provider: 内容来源，"xmly" 或 "migu"
+     *      searchSong: 歌曲列表（数组）；喜马结果已字段对齐为咪咕形态
+     *          musicId: 歌曲ID
+     *          musicName: 歌曲名称
+     *          singerName: 歌手名称
+     *          listenUrl: 试听地址
+     *          picUrl: 封面下载地址
+     *          lrcUrl: 歌词下载地址
+     *          length: 歌曲时长（格式：HH:mm:ss）
+     *          （喜马侧由 trackId/albumName/artists/playUrl/coverUrl/duration 等转换）
      * @param timeout 超时时长，单位ms
      * @return 0 成功，其他失败
      */
-    virtual int SearchSongEx(const std::string& input, std::string& output, int timeout = 10000) = 0;
+    virtual int Search(const std::string& input, std::string& output, int timeout = 10000) = 0;
     /**
      * 用户听歌记录上报
      * @param input 输入参数(json字符串)

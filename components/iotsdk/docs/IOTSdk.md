@@ -16,8 +16,11 @@
 | `IOTSDK_RET_INVALID_REQUEST` | `-5` | 请求不支持或无效 |
 | `IOTSDK_RET_TIMEOUT` | `-6` | 请求超时 |
 | `IOTSDK_RET_INVALID_DEVICE_ID` | `-7` | 设备 ID 为空 |
+| `IOTSDK_RET_UNPLAYABLE` | `-8` | 不可播放（`VIP`、`isCpAuth` 不满足播放条件） |
 
 接口注释中“`@return 0 成功，其他失败`”与上述错误码约定一致；具体失败时返回哪一个负值，以实现为准。
+
+`IOTSDK_RET_UNPLAYABLE` 常见于调用 `GetMusicInfo` 成功后校验曲目可播性：`musicInfo` 中 `isCpAuth`、`VIP` 须均为 `"1"`，且存在有效 `listenUrl`；否则视为不可播放（参见 `MusicInfo::Playable`）。
 
 ---
 
@@ -200,10 +203,12 @@ virtual int SearchByKey(const std::string& input, std::string& output, int timeo
 
 ---
 
-### 4.5 `SearchSong`
+### 4.5 `SearchSongEx`
+
+咪咕搜歌曲扩展接口。
 
 ```cpp
-virtual int SearchSong(const std::string& input, std::string& output, int timeout = 10000) = 0;
+virtual int SearchSongEx(const std::string& input, std::string& output, int timeout = 10000) = 0;
 ```
 
 | 参数 | 类型 | 说明 |
@@ -214,51 +219,109 @@ virtual int SearchSong(const std::string& input, std::string& output, int timeou
 
 **`input` JSON 字段：**
 
-`SearchSong` 入参与 `SearchByKey` 一致：
-
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `provider` | 是 | 仅支持 **`migu`** |
-| `text` | 是 | 搜索内容；当 `type=1` 且 `searchType=3`，或 `type=7` 时，`text` 为歌手 id |
+| 其余字段 | — | 与下文 **`Search`** 的「咪咕扩展」及通用 `text` 相同（见第 4.6 节） |
+
+**`output` JSON：**
+
+- `code` / `message` / `traceId` / `responseSign`
+- `data.searchSong`：歌曲列表（数组）；字段含义同第 4.6 节 **`Search`** 返回结果中的 `searchSong`
+
+**返回值：** `0` 成功，其他失败。
+
+---
+
+### 4.6 `Search`
+
+喜马拉雅 + 咪咕**合并内容搜索**。调用 OpenAPI `/openapi/iot/content/search`：服务端按 `providerOrder` 编排供应商搜索顺序（未传时通常先喜马后咪咕）。SDK 将顶层扁平入参拆分为 `xmly` / `migu` 分区提交，再把命中分区提升为与 `SearchSongEx` 相近的 `data` 结构返回。
+
+详细字段与编排逻辑可参见 [`喜马拉雅+咪咕合并内容查询-接口设计.md`](./喜马拉雅+咪咕合并内容查询-接口设计.md)。
+
+```cpp
+virtual int Search(const std::string& input, std::string& output, int timeout = 10000) = 0;
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | `std::string` | 请求参数，**JSON 字符串**（扁平传入，勿再嵌套 `xmly`/`migu`；由 SDK 内部组装） |
+| `output` | `std::string&` | 返回结果，**JSON 字符串**（由实现写入） |
+| `timeout` | `int` | 超时时间，单位 **毫秒**，默认 `10000` |
+
+**`input` JSON 字段：**
+
+**通用：**
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `text` | 是 | 搜索内容；映射为咪咕 `migu.text`，同时作为喜马 `xmly.content`；当 `type=1` 且 `searchType=3`，或 `type=7` 时，`text` 为歌手 id |
+| `providerOrder` | 否 | 内容供应商**搜索顺序**，`string` 数组；元素为 `"xmly"` / `"migu"`，按数组先后决定服务端编排优先级。示例：`["xmly","migu"]` 先喜马后咪咕；`["migu"]` 仅搜咪咕。未传时由服务端默认编排（通常先喜马后咪咕）。SDK 将其置于请求体顶层透传 |
+
+**喜马扩展（可选，进入 `xmly` 分区）：**
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `intent` | 否 | 意图：`listen_audiobook`（有声书，**默认**）、`listen_music`（音乐） |
+| `position` | 否 | 有声书集数；未传时可用 `pageIndex` 映射 |
+| `isRecommend` | 否 | 未搜到时是否返回推荐（boolean，默认 `false`） |
+
+**咪咕扩展（可选，进入 `migu` 分区；亦为 `SearchSongEx` 入参字段含义）：**
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
 | `type` | 否 | 搜索目的，默认 `1`：`1` 歌曲、`2` 专辑、`3` 歌手、`4` 标签下歌曲、`5` 无维度、`6` 联想、`7` 歌手下单曲/专辑/MV、`8` 歌词 |
-| `pageIndex` | 否 | 当前页（起始为 1） |
+| `pageIndex` | 否 | 当前页（起始为 1）；亦可用于映射喜马 `position` |
 | `pageSize` | 否 | 每页条数，`[0-50]` |
 | `searchType` | 否 | `type` 为 `1` 或 `5` 时有效：`1` 智能、`2` 关键词、`3` 歌手下歌曲、`4` 指定范围搜索等 |
 | `issemantic` | 否 | `type` 为 `1/2/3/4` 时有效：`1` 语义、`0` 否 |
 | `isCorrect` | 否 | `type` 为 `1/2/3/4/5` 时有效：`0` 关、`1` 开 |
 | `searchRange` | 否 | JSON **对象**，`type=1` 且 `searchType=4` 时精确搜索范围（意图） |
 
-**`output` JSON 结构（与头文件 `SearchSong` 注释一致）：**
-
-- `code`：返回码（示例：`"1"`）
-- `message`：返回消息（示例：`"Success"`）
-- `traceId`：链路追踪 ID
-- `data`：业务数据对象
-  - `searchSong`：歌曲列表（数组）；每条常用字段示例：`musicId`（18 位产品 ID）、`musicName`（歌曲名称）、`singerName`（歌手名称）
-- `responseSign`：响应签名（可能为 `null`）
-
-**返回值：** `0` 成功，其他失败。
-
----
-
-### 4.6 `SearchSongEx`
-
-咪咕搜歌曲扩展接口。
-
-```cpp
-virtual int SearchSongEx(const std::string& input, std::string& output, int timeout = 10000) = 0;
-```
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `input` | `std::string` | 请求参数，**JSON 字符串**；与 `SearchSong()` **完全一致**（字段含义见上文 **`SearchSong`** / `SearchByKey` 入参表） |
-| `output` | `std::string&` | 返回结果，**JSON 字符串**（由实现写入） |
-| `timeout` | `int` | 超时时间，单位 **毫秒**，默认 `10000` |
-
 **`output` JSON：**
 
-- 整体结构与 `SearchSong()` 基本一致：同为 `code`、`message`、`data` 等。
-- `data.searchSong` 为歌曲列表；每条记录在 `SearchSong` 已提供的 `singerName`、`musicName`（歌曲名称）等字段基础上，**额外包含 `listenUrl`（试听地址）**；其余业务字段与 `SearchSong` 返回对齐。
+- `code` / `message`：平台统一业务码与消息
+- `data`：命中侧结果（已从服务端的 `data.xmly` 或 `data.migu` 提升为顶层 `data`）
+  - `provider`：内容来源，`"xmly"` 或 `"migu"`
+  - `searchSong`：歌曲列表（数组）；喜马结果已字段对齐为咪咕形态
+    - `musicId`：歌曲 ID
+    - `musicName`：歌曲名称
+    - `singerName`：歌手名称
+    - `listenUrl`：试听地址
+    - `picUrl`：封面下载地址
+    - `lrcUrl`：歌词下载地址
+    - `length`：歌曲时长（格式：`HH:mm:ss`）
+    - 喜马侧由 `trackId` / `albumName` / `artists` / `playUrl` / `coverUrl` / `duration` 等转换而来
+
+**示例入参：**
+
+```json
+{
+  "text": "稻香",
+  "providerOrder": ["xmly", "migu"],
+  "intent": "listen_music",
+  "type": 1,
+  "pageIndex": 1,
+  "pageSize": 10,
+  "searchType": 4,
+  "searchRange": {
+    "songName": ["稻香"],
+    "singerName": ["周杰伦"]
+  }
+}
+```
+
+仅搜咪咕（向前兼容）示例：
+
+```json
+{
+  "text": "稻香",
+  "providerOrder": ["migu"],
+  "type": 1,
+  "pageIndex": 1,
+  "pageSize": 10
+}
+```
 
 **返回值：** `0` 成功，其他失败。
 
@@ -319,6 +382,8 @@ virtual int GetMusicInfo(const std::string& input, std::string& output, int time
 
 **`output` 中 `musicInfo` 字段：** 与头文件中咪咕 MusicInfo 描述一致（`musicId`, `musicName`, `bpm`, `singerName`, `albumNames`, `songAuthorName`, `lyricAuthorName`, `length`, `language`, `picUrl`, 各清晰度试听 URL、`lrcUrl`, `isCollection`, `isCpAuth`, `singerId`, `musicSource`, `auditionsFlag`, `VIP`, `contentId`, `isUserCollection`, `listenFlag` 等）。
 
+**可播性：** 集成方若需判断曲目是否可播，可校验 `isCpAuth`、`VIP` 均为 `"1"` 且 `listenUrl` 有效；不满足时上层可能返回 `IOTSDK_RET_UNPLAYABLE`（见第 1 节）。
+
 **返回值：** `0` 成功，其他失败。
 
 ---
@@ -328,7 +393,7 @@ virtual int GetMusicInfo(const std::string& input, std::string& output, int time
 1. **板载 HTTP**：**4G 模组**须在 `Init()` 之前注册 `SetOnGetBoardHttp`，否则无法使用网络功能；**WiFi 模组**不建议注册，更省内存、性能更优。若注册，`BoardHttp` 实现可参考 [`EspBoard.cpp`](../EspBoard.cpp)。`args` 中必填项需齐全，并与 `env`（prod/test）一致。
 2. 按第 3 节 **action** 区分咪咕 API（`IOTSDK_MIGU_HTTPS`）、音乐流（`IOTSDK_MIGU_MUSIC`）、OpenAPI（`IOTSDK_OPENAPI_HTTPS`）。
 3. **JSON 格式**：字段名、类型需与文档及头文件注释一致。
-4. **`GetMusicInfo`**、**`SearchByKey`**、**`SearchSong`**、**`SearchSongEx`**、**`Report`** 的 `provider` 仅支持 **`migu`**；**`SearchPlay`** 另支持 **`xmly`**（见第 4.3 节）。
+4. **`GetMusicInfo`**、**`SearchByKey`**、**`SearchSongEx`**、**`Report`** 的 `provider` 仅支持 **`migu`**；**`SearchPlay`** 另支持 **`xmly`**（见第 4.3 节）；**`Search`** 为喜马+咪咕合并搜索，用可选 `providerOrder`（如 `["xmly","migu"]`）指定搜索顺序，未传则由服务端默认编排（见第 4.6 节）。
 
 ---
 
